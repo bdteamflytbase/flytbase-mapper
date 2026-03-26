@@ -480,22 +480,6 @@
         </div>
     </div>
 
-    <!-- Persistent Upload Bar (survives navigation within the page) -->
-    <div id="upload-bar" style="display:none;position:fixed;top:56px;left:0;right:0;z-index:400;background:rgba(8,13,22,0.95);backdrop-filter:blur(12px);border-bottom:1px solid var(--fb-border);padding:12px 32px;">
-        <div style="display:flex;align-items:center;gap:14px;">
-            <div class="spinner" style="width:16px;height:16px;border-width:2px;border-top-color:var(--fb-primary);flex-shrink:0;"></div>
-            <div style="flex:1;">
-                <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
-                    <span id="upload-bar-text" style="font-size:13px;font-weight:500;color:var(--fb-text);">Uploading...</span>
-                    <span id="upload-bar-count" style="font-size:12px;font-family:var(--fb-mono);color:var(--fb-primary);font-weight:600;">0 / 0</span>
-                </div>
-                <div style="height:4px;background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden;">
-                    <div id="upload-bar-progress" style="height:100%;border-radius:2px;width:0%;transition:width 0.3s;background:linear-gradient(90deg, var(--fb-primary), #00cdff);"></div>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <!-- Site Detail View -->
     <div class="site-detail-overlay" id="site-detail">
         <div class="site-detail-header">
@@ -657,14 +641,27 @@
                             </div>
                         </div>
                     `;
-                } else if (isProcessing && latest.status === 'created') {
+                } else if (isProcessing && (latest.status === 'created' || latest.status === 'uploaded')) {
                     const imgCount = latest.image_count || 0;
+                    // Check localStorage for active upload progress
+                    const uploadState = JSON.parse(localStorage.getItem('mapper_upload') || '{}');
+                    const isActiveUpload = uploadState.projectId === latest.id;
+                    const uploadTotal = isActiveUpload ? uploadState.total : 0;
+                    const uploadDone = isActiveUpload ? uploadState.uploaded : imgCount;
+                    const uploadPct = uploadTotal > 0 ? Math.round(uploadDone / uploadTotal * 100) : (imgCount > 0 ? 100 : 0);
+                    const uploadText = isActiveUpload
+                        ? 'Uploading... ' + uploadDone + ' / ' + uploadTotal + ' images'
+                        : (latest.status === 'uploaded' ? 'Waiting to process — ' + imgCount + ' images' : 'Uploading images' + (imgCount > 0 ? ' — ' + imgCount + ' received' : ''));
                     statusHtml = `
                         <div style="padding:10px 16px;border-top:1px solid var(--fb-border);background:linear-gradient(135deg, rgba(59,141,245,0.04), rgba(52,211,153,0.04));">
-                            <div style="display:flex;align-items:center;gap:8px;">
-                                <div class="spinner" style="width:14px;height:14px;border-width:2px;border-top-color:var(--fb-primary);flex-shrink:0;"></div>
-                                <span style="font-size:12px;color:var(--fb-text);font-weight:500;">Uploading images${imgCount > 0 ? ' — ' + imgCount + ' received' : ''}...</span>
+                            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+                                <div style="display:flex;align-items:center;gap:8px;">
+                                    <div class="spinner" style="width:14px;height:14px;border-width:2px;border-top-color:var(--fb-primary);flex-shrink:0;"></div>
+                                    <span style="font-size:12px;color:var(--fb-text);font-weight:500;">${uploadText}</span>
+                                </div>
+                                ${uploadTotal > 0 ? '<span style="font-size:11px;font-family:var(--fb-mono);color:var(--fb-primary);font-weight:700;">' + uploadPct + '%</span>' : ''}
                             </div>
+                            ${uploadTotal > 0 ? '<div style="height:3px;background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden;"><div style="height:100%;border-radius:2px;width:' + uploadPct + '%;transition:width 0.3s;background:linear-gradient(90deg, var(--fb-primary), #00cdff);"></div></div>' : ''}
                         </div>
                     `;
                 } else if (isProcessing) {
@@ -811,10 +808,22 @@
             const quality = document.getElementById('proj-quality').value;
             const est = estimateTime(files.length, quality);
 
+            // Check if this is a resume
+            const state = JSON.parse(localStorage.getItem('mapper_upload') || '{}');
+            const isResume = state.projectId && state.uploaded > 0 && state.uploaded < state.total;
+            const alreadyDone = isResume ? state.uploaded : 0;
+            const remaining = files.length - alreadyDone;
+
             document.getElementById('drop-zone').style.display = 'none';
             document.getElementById('upload-actions').style.display = 'block';
-            document.getElementById('file-summary').innerHTML =
-                `<b>${files.length}</b> images selected · Estimated processing time: <b>${est}</b>`;
+
+            if (isResume) {
+                document.getElementById('file-summary').innerHTML =
+                    `<b>Resuming upload:</b> ${alreadyDone} already uploaded, ${remaining > 0 ? remaining + ' remaining' : 'all done'} · <b>${est}</b>`;
+            } else {
+                document.getElementById('file-summary').innerHTML =
+                    `<b>${files.length}</b> images selected · Estimated processing time: <b>${est}</b>`;
+            }
 
             updateTimeEstimate();
         }
@@ -829,67 +838,35 @@
             const fileCount = selectedFiles.length;
             const filesToUpload = Array.from(selectedFiles);
 
-            // Close modal immediately
+            // Close modal immediately — progress shows on card
             isUploading = false;
             selectedFiles = null;
             document.getElementById('new-project-modal').classList.remove('show');
 
-            // Show persistent upload bar
-            const bar = document.getElementById('upload-bar');
-            const barText = document.getElementById('upload-bar-text');
-            const barCount = document.getElementById('upload-bar-count');
-            const barProgress = document.getElementById('upload-bar-progress');
-            bar.style.display = 'block';
-            barText.textContent = 'Creating project...';
-            barCount.textContent = '0 / ' + fileCount;
-            barProgress.style.width = '0%';
-
             // Step 1: Create project
+            toast('Creating project...');
             const form = new FormData();
             form.append('site_id', currentSiteId);
             form.append('name', name);
             form.append('quality', quality);
             const proj = await fetch('/api/projects', { method: 'POST', body: form }).then(r => r.json());
-            barText.textContent = 'Uploading images...';
-            loadDashboard();
 
-            // Step 2: Upload images in batches with progress bar
-            // Save state to localStorage so we can detect interrupted uploads
+            // Step 2: Upload with true resume support
+            // Store file names + project ID in localStorage
+            const allFileNames = filesToUpload.map(f => f.name);
             localStorage.setItem('mapper_upload', JSON.stringify({
-                projectId: proj.id, total: fileCount, uploaded: 0, startedAt: Date.now()
+                projectId: proj.id,
+                siteId: currentSiteId,
+                total: fileCount,
+                uploaded: 0,
+                uploadedNames: [],
+                quality: quality,
+                startedAt: Date.now()
             }));
-
-            const BATCH_SIZE = 10;
-            let uploaded = 0;
-            for (let i = 0; i < filesToUpload.length; i += BATCH_SIZE) {
-                const batch = filesToUpload.slice(i, i + BATCH_SIZE);
-                const batchForm = new FormData();
-                for (const f of batch) batchForm.append('files', f);
-                await fetch('/api/projects/' + proj.id + '/upload', { method: 'POST', body: batchForm });
-                uploaded += batch.length;
-                const pct = Math.round(uploaded / fileCount * 100);
-                barCount.textContent = uploaded + ' / ' + fileCount;
-                barProgress.style.width = pct + '%';
-                barText.textContent = 'Uploading images... ' + pct + '%';
-                // Update localStorage with progress
-                localStorage.setItem('mapper_upload', JSON.stringify({
-                    projectId: proj.id, total: fileCount, uploaded: uploaded, startedAt: Date.now()
-                }));
-                // Refresh dashboard to show image count on card
-                if (uploaded % 30 === 0) loadDashboard();
-            }
-            localStorage.removeItem('mapper_upload');
-
-            // Step 3: Start processing
-            barText.textContent = 'Starting processing...';
-            barProgress.style.width = '100%';
-            barProgress.style.background = 'linear-gradient(90deg, var(--fb-success), #38ef7d)';
-            const { job_id } = await fetch('/api/projects/' + proj.id + '/process', { method: 'POST' }).then(r => r.json());
-
-            // Hide bar after 3 seconds
-            barText.textContent = 'Upload complete — map is being created (' + estimateTime(fileCount, quality) + ')';
-            setTimeout(() => { bar.style.display = 'none'; }, 5000);
+            toast('Uploading ' + fileCount + ' images...');
             loadDashboard();
+
+            await doUpload(proj.id, filesToUpload, fileCount, quality);
         }
 
         function setUploadStatus(text, pct) {
@@ -978,7 +955,13 @@
                 } else if (status === 'uploaded') {
                     statusDetail = 'Waiting to process';
                 } else if (status === 'created') {
-                    statusDetail = proj.image_count > 0 ? proj.image_count + ' images uploaded' : 'Uploading...';
+                    const us = JSON.parse(localStorage.getItem('mapper_upload') || '{}');
+                    if (us.projectId === proj.id && us.total > 0) {
+                        statusDetail = us.uploaded + ' / ' + us.total + ' images uploaded';
+                        progressHtml = '<div class="proj-progress"><div class="proj-progress-bar" style="width:' + Math.round(us.uploaded/us.total*100) + '%;background:linear-gradient(90deg,var(--fb-primary),#00cdff);"></div></div>';
+                    } else {
+                        statusDetail = proj.image_count > 0 ? proj.image_count + ' images received' : 'Waiting for images...';
+                    }
                 } else if (status === 'completed') {
                     statusDetail = proj.image_count + ' images · ' + (proj.quality || 'medium') + ' quality';
                 } else if (status === 'failed') {
@@ -1120,22 +1103,65 @@
             if (e.key === 'Escape') { closeModal('new-site-modal'); closeModal('new-project-modal'); }
         });
 
-        // ── Resume interrupted uploads on page load ──
-        async function checkPendingUploads() {
-            try {
-                const projects = await fetch('/api/projects').then(r => r.json());
-                const uploading = projects.filter(p => p.status === 'created' && p.image_count > 0);
-                if (uploading.length > 0) {
-                    const p = uploading[0];
-                    const bar = document.getElementById('upload-bar');
-                    const barText = document.getElementById('upload-bar-text');
-                    const barCount = document.getElementById('upload-bar-count');
-                    bar.style.display = 'block';
-                    barText.textContent = 'Upload in progress (started before refresh)';
-                    barCount.textContent = p.image_count + ' images received';
-                    document.getElementById('upload-bar-progress').style.width = '50%';
+        // ── Upload engine with true resume ──
+        async function doUpload(projectId, files, totalCount, quality) {
+            const BATCH_SIZE = 10;
+            let state = JSON.parse(localStorage.getItem('mapper_upload') || '{}');
+            const uploadedNames = new Set(state.uploadedNames || []);
+            let uploaded = uploadedNames.size;
+
+            // Filter out already-uploaded files (for resume)
+            const remaining = files.filter(f => !uploadedNames.has(f.name));
+
+            for (let i = 0; i < remaining.length; i += BATCH_SIZE) {
+                const batch = remaining.slice(i, i + BATCH_SIZE);
+                const batchForm = new FormData();
+                for (const f of batch) batchForm.append('files', f);
+
+                try {
+                    await fetch('/api/projects/' + projectId + '/upload', { method: 'POST', body: batchForm });
+                    for (const f of batch) uploadedNames.add(f.name);
+                    uploaded = uploadedNames.size;
+
+                    // Save progress to localStorage after every batch
+                    localStorage.setItem('mapper_upload', JSON.stringify({
+                        projectId: projectId,
+                        total: totalCount,
+                        uploaded: uploaded,
+                        uploadedNames: Array.from(uploadedNames),
+                        quality: quality,
+                        startedAt: state.startedAt || Date.now()
+                    }));
+
+                    // Refresh dashboard every 20 images to update card
+                    if (uploaded % 20 === 0 || uploaded === totalCount) loadDashboard();
+                } catch (e) {
+                    toast('Upload paused — ' + uploaded + '/' + totalCount + ' saved. Refresh to resume.');
+                    return;
                 }
-            } catch(e) {}
+            }
+
+            // Upload complete — start processing
+            localStorage.removeItem('mapper_upload');
+            toast('All ' + totalCount + ' images uploaded — starting processing...');
+            loadDashboard();
+
+            const { job_id } = await fetch('/api/projects/' + projectId + '/process', { method: 'POST' }).then(r => r.json());
+            toast('Map is being created — ' + estimateTime(totalCount, quality));
+            loadDashboard();
+        }
+
+        // ── Check for interrupted uploads on page load ──
+        async function checkPendingUploads() {
+            const state = JSON.parse(localStorage.getItem('mapper_upload') || '{}');
+            if (!state.projectId || !state.total) return;
+
+            // There was an interrupted upload — show it on the dashboard
+            // The files are lost from browser memory, but the server has what was received
+            // User needs to re-select files to resume
+            if (state.uploaded < state.total) {
+                toast('Interrupted upload detected: ' + state.uploaded + '/' + state.total + ' images. Re-select files on the project to resume.');
+            }
         }
 
         // ── Init + auto-refresh ──
