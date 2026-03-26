@@ -480,6 +480,22 @@
         </div>
     </div>
 
+    <!-- Persistent Upload Bar (survives navigation within the page) -->
+    <div id="upload-bar" style="display:none;position:fixed;top:56px;left:0;right:0;z-index:400;background:rgba(8,13,22,0.95);backdrop-filter:blur(12px);border-bottom:1px solid var(--fb-border);padding:12px 32px;">
+        <div style="display:flex;align-items:center;gap:14px;">
+            <div class="spinner" style="width:16px;height:16px;border-width:2px;border-top-color:var(--fb-primary);flex-shrink:0;"></div>
+            <div style="flex:1;">
+                <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+                    <span id="upload-bar-text" style="font-size:13px;font-weight:500;color:var(--fb-text);">Uploading...</span>
+                    <span id="upload-bar-count" style="font-size:12px;font-family:var(--fb-mono);color:var(--fb-primary);font-weight:600;">0 / 0</span>
+                </div>
+                <div style="height:4px;background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden;">
+                    <div id="upload-bar-progress" style="height:100%;border-radius:2px;width:0%;transition:width 0.3s;background:linear-gradient(90deg, var(--fb-primary), #00cdff);"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Site Detail View -->
     <div class="site-detail-overlay" id="site-detail">
         <div class="site-detail-header">
@@ -813,10 +829,20 @@
             const fileCount = selectedFiles.length;
             const filesToUpload = Array.from(selectedFiles);
 
-            // Close modal immediately and show state on dashboard
+            // Close modal immediately
             isUploading = false;
             selectedFiles = null;
             document.getElementById('new-project-modal').classList.remove('show');
+
+            // Show persistent upload bar
+            const bar = document.getElementById('upload-bar');
+            const barText = document.getElementById('upload-bar-text');
+            const barCount = document.getElementById('upload-bar-count');
+            const barProgress = document.getElementById('upload-bar-progress');
+            bar.style.display = 'block';
+            barText.textContent = 'Creating project...';
+            barCount.textContent = '0 / ' + fileCount;
+            barProgress.style.width = '0%';
 
             // Step 1: Create project
             const form = new FormData();
@@ -824,11 +850,11 @@
             form.append('name', name);
             form.append('quality', quality);
             const proj = await fetch('/api/projects', { method: 'POST', body: form }).then(r => r.json());
-            toast('Uploading ' + fileCount + ' images...');
+            barText.textContent = 'Uploading images...';
             loadDashboard();
 
-            // Step 2: Upload images in batches with progress
-            const BATCH_SIZE = 20;
+            // Step 2: Upload images in batches with progress bar
+            const BATCH_SIZE = 10;
             let uploaded = 0;
             for (let i = 0; i < filesToUpload.length; i += BATCH_SIZE) {
                 const batch = filesToUpload.slice(i, i + BATCH_SIZE);
@@ -836,14 +862,21 @@
                 for (const f of batch) batchForm.append('files', f);
                 await fetch('/api/projects/' + proj.id + '/upload', { method: 'POST', body: batchForm });
                 uploaded += batch.length;
-                toast('Uploaded ' + uploaded + ' / ' + fileCount + ' images (' + Math.round(uploaded/fileCount*100) + '%)');
+                const pct = Math.round(uploaded / fileCount * 100);
+                barCount.textContent = uploaded + ' / ' + fileCount;
+                barProgress.style.width = pct + '%';
+                barText.textContent = 'Uploading images... ' + pct + '%';
             }
-            toast('Upload complete — starting processing...');
-            loadDashboard();
 
             // Step 3: Start processing
+            barText.textContent = 'Starting processing...';
+            barProgress.style.width = '100%';
+            barProgress.style.background = 'linear-gradient(90deg, var(--fb-success), #38ef7d)';
             const { job_id } = await fetch('/api/projects/' + proj.id + '/process', { method: 'POST' }).then(r => r.json());
-            toast('Map is being created — ' + estimateTime(fileCount, quality));
+
+            // Hide bar after 3 seconds
+            barText.textContent = 'Upload complete — map is being created (' + estimateTime(fileCount, quality) + ')';
+            setTimeout(() => { bar.style.display = 'none'; }, 5000);
             loadDashboard();
         }
 
