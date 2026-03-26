@@ -563,8 +563,15 @@ def _run_odm(job_id, project_id):
         "high": ["--orthophoto-resolution", "1", "--pc-quality", "high", "--mesh-octree-depth", "12", "--feature-quality", "high"],
     }
 
-    # Try native ODM first (for RunPod), fall back to Docker
-    odm_native = shutil.which("odm") or shutil.which("run.py")
+    # Try native ODM first (for RunPod custom image), fall back to Docker
+    odm_paths = ["/code/run.py", "/opt/odm/run.py", "/workspace/ODM/run.py"]
+    odm_native = None
+    for p in odm_paths:
+        if os.path.exists(p):
+            odm_native = p
+            break
+    if not odm_native:
+        odm_native = shutil.which("run.py")
     use_docker = odm_native is None
 
     if use_docker:
@@ -592,7 +599,7 @@ def _run_odm(job_id, project_id):
     else:
         # Native ODM — run directly (for RunPod custom image)
         cmd = [
-            "python", "/opt/odm/run.py",
+            "python", odm_native,
             "--project-path", str(project_dir.parent),
             "--dsm", "--dtm",
             *quality_args.get(quality, quality_args["medium"]),

@@ -1,50 +1,38 @@
-# FlytBase Mapper — RunPod Docker Image
-# Contains: ODM (native) + CUDA + Python + FastAPI + All dependencies
-# Use as RunPod container image: ghcr.io/bdteamflytbase/flytbase-mapper:runpod
+# FlytBase Mapper for RunPod
+# Based on ODM image (has all photogrammetry tools) + our app on top
 #
-# Build: docker build -f Dockerfile.runpod -t ghcr.io/bdteamflytbase/flytbase-mapper:runpod .
-# Push:  docker push ghcr.io/bdteamflytbase/flytbase-mapper:runpod
+# Build:  docker build -f Dockerfile.runpod -t ghcr.io/bdteamflytbase/flytbase-mapper:runpod .
+# Push:   docker push ghcr.io/bdteamflytbase/flytbase-mapper:runpod
+# RunPod: Use ghcr.io/bdteamflytbase/flytbase-mapper:runpod as container image
 
-FROM opendronemap/odm:latest AS odm
+FROM opendronemap/odm:latest
 
-# Start from RunPod's pytorch base (has CUDA + Python)
-FROM runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04
+# ODM image is Ubuntu-based with Python 3.x + all ODM deps pre-built
+# We just add our FastAPI app on top
 
-# Copy ODM from the ODM image
-COPY --from=odm /code /opt/odm
+# Install our Python dependencies
+# Install deps (skip open3d — ODM handles mesh natively)
+COPY requirements.txt /tmp/requirements.txt
+RUN grep -v "open3d" /tmp/requirements.txt > /tmp/reqs_filtered.txt && \
+    pip install --no-cache-dir --ignore-installed -r /tmp/reqs_filtered.txt && \
+    pip install --no-cache-dir rasterio shapely || true
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gdal-bin \
-    libgdal-dev \
-    git \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
-
-# Set ODM path
-ENV PATH="/opt/odm/SuperBuild/install/bin:/opt/odm:${PATH}"
-ENV LD_LIBRARY_PATH="/opt/odm/SuperBuild/install/lib:${LD_LIBRARY_PATH}"
-
-# Install Python dependencies
+# Copy our application
 WORKDIR /workspace/flytbase-mapper
-COPY requirements.txt .
-RUN pip install --no-cache-dir --ignore-installed -r requirements.txt && \
-    pip install --no-cache-dir rasterio shapely
-
-# Copy application code
 COPY scripts/ scripts/
 COPY viewer/ viewer/
-COPY output/ output/
-COPY deploy/ deploy/
+COPY output/change_analysis.json output/change_analysis.json
 
 # Create directories
-RUN mkdir -p data images odm_project/odm_texturing odm_project/odm_dem
+RUN mkdir -p data output images odm_project/odm_texturing odm_project/odm_dem
 
 # Initialize database
 RUN python scripts/database.py
 
-# Expose port
-EXPOSE 4000
+# Ensure ODM's run.py is findable
+ENV ODM_PATH="/code"
+ENV PYTHONPATH="/code:${PYTHONPATH}"
 
-# Start the mapper server
+# Default command: start the mapper server
+EXPOSE 4000
 CMD ["python", "scripts/api.py", "--port", "4000"]
