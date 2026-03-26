@@ -563,14 +563,41 @@ def _run_odm(job_id, project_id):
         "high": ["--orthophoto-resolution", "1", "--pc-quality", "high", "--mesh-octree-depth", "12", "--feature-quality", "high"],
     }
 
-    cmd = [
-        "docker", "run", "--rm",
-        "-v", f"{project_dir}:/datasets/code",
-        "opendronemap/odm",
-        "--project-path", "/datasets",
-        "--dsm", "--dtm",
-        *quality_args.get(quality, quality_args["medium"]),
-    ]
+    # Try native ODM first (for RunPod), fall back to Docker
+    odm_native = shutil.which("odm") or shutil.which("run.py")
+    use_docker = odm_native is None
+
+    if use_docker:
+        # Check if Docker is available
+        try:
+            subprocess.run(["docker", "info"], capture_output=True, timeout=5, check=True)
+        except Exception:
+            # Neither native ODM nor Docker available
+            job.status = "failed"
+            job.message = "ODM not available. Install ODM or Docker."
+            project.status = "failed"
+            db.commit()
+            db.close()
+            return
+
+    if use_docker:
+        cmd = [
+            "docker", "run", "--rm",
+            "-v", f"{project_dir}:/datasets/code",
+            "opendronemap/odm",
+            "--project-path", "/datasets",
+            "--dsm", "--dtm",
+            *quality_args.get(quality, quality_args["medium"]),
+        ]
+    else:
+        # Native ODM — run directly (for RunPod custom image)
+        cmd = [
+            "python", "/opt/odm/run.py",
+            "--project-path", str(project_dir.parent),
+            "--dsm", "--dtm",
+            *quality_args.get(quality, quality_args["medium"]),
+            str(project_dir.name),
+        ]
 
     try:
         import re

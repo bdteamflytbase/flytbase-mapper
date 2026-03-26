@@ -1,0 +1,50 @@
+# FlytBase Mapper — RunPod Docker Image
+# Contains: ODM (native) + CUDA + Python + FastAPI + All dependencies
+# Use as RunPod container image: ghcr.io/bdteamflytbase/flytbase-mapper:runpod
+#
+# Build: docker build -f Dockerfile.runpod -t ghcr.io/bdteamflytbase/flytbase-mapper:runpod .
+# Push:  docker push ghcr.io/bdteamflytbase/flytbase-mapper:runpod
+
+FROM opendronemap/odm:latest AS odm
+
+# Start from RunPod's pytorch base (has CUDA + Python)
+FROM runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04
+
+# Copy ODM from the ODM image
+COPY --from=odm /code /opt/odm
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gdal-bin \
+    libgdal-dev \
+    git \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set ODM path
+ENV PATH="/opt/odm/SuperBuild/install/bin:/opt/odm:${PATH}"
+ENV LD_LIBRARY_PATH="/opt/odm/SuperBuild/install/lib:${LD_LIBRARY_PATH}"
+
+# Install Python dependencies
+WORKDIR /workspace/flytbase-mapper
+COPY requirements.txt .
+RUN pip install --no-cache-dir --ignore-installed -r requirements.txt && \
+    pip install --no-cache-dir rasterio shapely
+
+# Copy application code
+COPY scripts/ scripts/
+COPY viewer/ viewer/
+COPY output/ output/
+COPY deploy/ deploy/
+
+# Create directories
+RUN mkdir -p data images odm_project/odm_texturing odm_project/odm_dem
+
+# Initialize database
+RUN python scripts/database.py
+
+# Expose port
+EXPOSE 4000
+
+# Start the mapper server
+CMD ["python", "scripts/api.py", "--port", "4000"]
