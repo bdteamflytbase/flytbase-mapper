@@ -241,20 +241,45 @@
                         <input class="form-input" id="proj-name" placeholder="e.g., March 2026 Survey" />
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Quality</label>
-                        <select class="form-input" id="proj-quality">
-                            <option value="preview">Preview (fast, ~5 min)</option>
-                            <option value="medium" selected>Medium (balanced, ~15 min)</option>
-                            <option value="high">High (best quality, ~45 min)</option>
+                        <label class="form-label">Output Type</label>
+                        <select class="form-input" id="proj-output-type">
+                            <option value="all" selected>Full Package (Ortho + 3D + Elevation)</option>
+                            <option value="ortho">Orthomosaic Only (2D Map)</option>
+                            <option value="3d">3D Model Only</option>
+                            <option value="ortho+dsm">Ortho + Elevation (DSM/DTM)</option>
                         </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Quality</label>
+                        <select class="form-input" id="proj-quality" onchange="updateTimeEstimate()">
+                            <option value="preview">Preview (fastest)</option>
+                            <option value="medium" selected>Medium (balanced)</option>
+                            <option value="high">High (best quality)</option>
+                        </select>
+                        <div class="form-hint" id="time-estimate">Estimated time depends on number of images</div>
                     </div>
                     <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
                         <svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20 6v20M12 14l8-8 8 8"/><path d="M6 28v4a2 2 0 002 2h24a2 2 0 002-2v-4"/></svg>
                         <p>Drop drone images here or click to browse</p>
                         <div class="hint">Supports JPG, JPEG, PNG, TIF, DNG</div>
                     </div>
-                    <input type="file" id="file-input" multiple accept=".jpg,.jpeg,.png,.tif,.tiff,.dng" style="display:none" onchange="handleFiles(this.files)" />
-                    <div id="upload-status" style="margin-top:12px;font-size:12px;color:var(--fb-text-tertiary);"></div>
+                    <input type="file" id="file-input" multiple accept=".jpg,.jpeg,.png,.tif,.tiff,.dng" style="display:none" onchange="onFilesSelected(this.files)" />
+                    <div id="upload-status" style="margin-top:12px;font-size:12px;color:var(--fb-text-tertiary);display:none;">
+                        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+                            <div id="upload-spinner" class="spinner" style="width:16px;height:16px;border-width:2px;display:none;"></div>
+                            <span id="upload-status-text"></span>
+                        </div>
+                        <div style="height:4px;background:var(--fb-surface);border-radius:2px;overflow:hidden;">
+                            <div id="upload-progress-bar" style="height:100%;background:var(--fb-primary);border-radius:2px;width:0%;transition:width 0.3s;"></div>
+                        </div>
+                    </div>
+                    <div id="upload-actions" style="display:none;margin-top:12px;">
+                        <div id="file-summary" style="font-size:12px;color:var(--fb-text-secondary);margin-bottom:8px;"></div>
+                        <button class="btn btn-primary" onclick="startUploadAndProcess()" style="width:100%;">
+                            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="width:14px;height:14px"><path d="M8 2v9M4 7l4 4 4-4M2 13h12"/></svg>
+                            Upload &amp; Start Processing
+                        </button>
+                    </div>
                 </div>
 
                 <!-- FlytBase Import Tab -->
@@ -299,48 +324,136 @@
 
     <script>
         let currentSiteId = null;
+        let selectedFiles = null;
+        let activePollers = {};
 
-        // ── Load Dashboard ──
+        // ── Time Estimate based on image count and quality ──
+        function estimateTime(imageCount, quality) {
+            // Based on real benchmarks: M3 Mac ~1 min/image for medium
+            const perImage = { preview: 0.15, medium: 0.6, high: 1.5 }; // minutes per image
+            const mins = Math.ceil(imageCount * (perImage[quality] || 0.6));
+            if (mins < 2) return 'Less than 2 minutes';
+            if (mins < 60) return `~${mins} minutes`;
+            const hrs = (mins / 60).toFixed(1);
+            return `~${hrs} hours`;
+        }
+
+        function updateTimeEstimate() {
+            const quality = document.getElementById('proj-quality').value;
+            const count = selectedFiles ? selectedFiles.length : 0;
+            const hint = document.getElementById('time-estimate');
+            if (count > 0) {
+                hint.textContent = `${count} images × ${quality} quality = ${estimateTime(count, quality)}`;
+                hint.style.color = 'var(--fb-primary)';
+            } else {
+                hint.textContent = 'Estimated time depends on number of images';
+                hint.style.color = '';
+            }
+        }
+
+        // ── Load Dashboard with live status ──
         async function loadDashboard() {
             const sites = await fetch('/api/sites').then(r => r.json());
+            const allJobs = await fetch('/api/jobs').then(r => r.json());
 
-            // Stats
+            // Count total images
+            const totalImages = sites.reduce((s, site) => {
+                const lp = site.latest_project;
+                return s + (lp ? lp.image_count || 0 : 0);
+            }, 0);
+            const processing = allJobs.filter(j => j.status === 'running').length;
             const totalProjects = sites.reduce((s, site) => s + (site.project_count || 0), 0);
+
             document.getElementById('stats-row').innerHTML = `
                 <div class="stat-card"><div class="value primary">${sites.length}</div><div class="label">Sites</div></div>
                 <div class="stat-card"><div class="value accent">${totalProjects}</div><div class="label">Projects</div></div>
-                <div class="stat-card"><div class="value success">${sites.filter(s => s.status === 'active').length}</div><div class="label">Active</div></div>
-                <div class="stat-card"><div class="value">72</div><div class="label">Images Processed</div></div>
+                <div class="stat-card"><div class="value">${totalImages.toLocaleString()}</div><div class="label">Images</div></div>
+                <div class="stat-card"><div class="value ${processing > 0 ? 'accent' : 'success'}">${processing > 0 ? processing + ' running' : 'Idle'}</div><div class="label">Processing</div></div>
             `;
 
-            // Grid
             const grid = document.getElementById('site-grid');
             grid.innerHTML = '';
 
             sites.forEach(site => {
                 const latest = site.latest_project;
+                const isProcessing = latest && ['processing', 'uploading', 'importing'].includes(latest.status);
+                const isCompleted = latest && latest.status === 'completed';
+                const isFailed = latest && latest.status === 'failed';
+
+                // Find active job for this project
+                const activeJob = latest ? allJobs.find(j => j.project_id === latest.id && j.status === 'running') : null;
+
                 const card = document.createElement('div');
                 card.className = 'site-card';
                 card.onclick = () => {
-                    if (latest) {
-                        location.href = `/project/${latest.id}`;
+                    if (isCompleted) {
+                        location.href = '/project/' + latest.id;
+                    } else if (isProcessing) {
+                        toast('Processing in progress — ' + (activeJob ? activeJob.progress + '%' : 'please wait'));
+                    } else {
+                        toast('No completed map yet. Click + Project to start.');
                     }
                 };
+
+                // Status badge
+                let statusHtml = '';
+                if (isProcessing && activeJob) {
+                    statusHtml = `
+                        <div style="padding:8px 16px;border-top:1px solid var(--fb-border);background:rgba(245,158,11,0.05);">
+                            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+                                <span style="font-size:11px;color:var(--fb-accent);font-weight:600;">Processing — ${activeJob.message || 'Working...'}</span>
+                                <span style="font-size:11px;font-family:var(--fb-mono);color:var(--fb-accent);font-weight:700;">${activeJob.progress}%</span>
+                            </div>
+                            <div style="height:3px;background:var(--fb-surface);border-radius:2px;overflow:hidden;">
+                                <div style="height:100%;background:var(--fb-accent);border-radius:2px;width:${activeJob.progress}%;transition:width 0.5s;"></div>
+                            </div>
+                        </div>
+                    `;
+                    // Start polling for this card
+                    if (!activePollers[activeJob.id]) {
+                        activePollers[activeJob.id] = true;
+                        pollDashboardJob(activeJob.id);
+                    }
+                } else if (isProcessing) {
+                    statusHtml = `
+                        <div style="padding:8px 16px;border-top:1px solid var(--fb-border);background:rgba(245,158,11,0.05);">
+                            <span style="font-size:11px;color:var(--fb-accent);font-weight:600;">Processing...</span>
+                        </div>
+                    `;
+                } else if (isFailed) {
+                    statusHtml = `
+                        <div style="padding:8px 16px;border-top:1px solid var(--fb-border);background:rgba(248,113,113,0.05);">
+                            <span style="font-size:11px;color:var(--fb-destructive);font-weight:600;">Processing failed</span>
+                        </div>
+                    `;
+                }
+
+                // Status dot color
+                const dotClass = isProcessing ? 'processing' : (isCompleted ? 'active' : '');
+
                 card.innerHTML = `
-                    ${site.thumbnail_url
+                    ${site.thumbnail_url && isCompleted
                         ? `<img class="site-card-thumb" src="${site.thumbnail_url}" alt="${site.name}" />`
-                        : `<div class="site-card-thumb placeholder">No survey data yet</div>`
+                        : isProcessing
+                            ? `<div class="site-card-thumb placeholder" style="background:rgba(245,158,11,0.05);color:var(--fb-accent);">
+                                <div style="text-align:center;">
+                                    <div class="spinner" style="width:24px;height:24px;border-width:2px;margin:0 auto 8px;border-top-color:var(--fb-accent);"></div>
+                                    <div style="font-size:12px;">${latest.image_count || 0} images processing...</div>
+                                </div>
+                               </div>`
+                            : `<div class="site-card-thumb placeholder">No survey data yet</div>`
                     }
                     <div class="site-card-body">
                         <div class="site-card-name">${site.name}</div>
-                        <div class="site-card-meta">${site.description || 'No description'}</div>
+                        <div class="site-card-meta">${site.description || (latest ? latest.image_count + ' images · ' + (latest.quality || 'medium') + ' quality' : 'No projects yet')}</div>
                         <div class="site-card-tags">
                             ${(site.tags || []).map(t => `<span class="site-tag">${t}</span>`).join('')}
                         </div>
                     </div>
+                    ${statusHtml}
                     <div class="site-card-footer">
-                        <span class="stat"><span class="status-dot active"></span> <b>${site.project_count || 0}</b> project${site.project_count !== 1 ? 's' : ''}</span>
-                        <span class="stat">${site.latitude?.toFixed(4) || '—'}, ${site.longitude?.toFixed(4) || '—'}</span>
+                        <span class="stat"><span class="status-dot ${dotClass}"></span> <b>${site.project_count || 0}</b> project${site.project_count !== 1 ? 's' : ''}</span>
+                        <span class="stat">${site.latitude > 0 ? site.latitude.toFixed(4) + ', ' + site.longitude.toFixed(4) : '—'}</span>
                         <button class="btn" style="font-size:11px;padding:4px 10px;" onclick="event.stopPropagation();openNewProjectModal('${site.id}')">+ Project</button>
                     </div>
                 `;
@@ -358,9 +471,41 @@
             grid.appendChild(newCard);
         }
 
+        // ── Dashboard Job Poller — refreshes site cards ──
+        function pollDashboardJob(jobId) {
+            const check = async () => {
+                try {
+                    const job = await fetch('/api/jobs/' + jobId).then(r => r.json());
+                    if (job.status === 'completed' || job.status === 'failed') {
+                        delete activePollers[jobId];
+                        loadDashboard(); // Refresh the whole dashboard
+                        if (job.status === 'completed') {
+                            toast('Map processing complete!');
+                        } else {
+                            toast('Processing failed: ' + job.message);
+                        }
+                    } else {
+                        // Refresh dashboard to update progress bar
+                        loadDashboard();
+                        setTimeout(check, 8000);
+                    }
+                } catch (e) {
+                    delete activePollers[jobId];
+                }
+            };
+            setTimeout(check, 8000);
+        }
+
         // ── Modals ──
         function openNewSiteModal() { document.getElementById('new-site-modal').classList.add('show'); }
-        function openNewProjectModal(siteId) { currentSiteId = siteId; document.getElementById('new-project-modal').classList.add('show'); }
+        function openNewProjectModal(siteId) {
+            currentSiteId = siteId;
+            selectedFiles = null;
+            document.getElementById('upload-status').style.display = 'none';
+            document.getElementById('upload-actions').style.display = 'none';
+            document.getElementById('drop-zone').style.display = '';
+            document.getElementById('new-project-modal').classList.add('show');
+        }
         function closeModal(id) { document.getElementById(id).classList.remove('show'); }
 
         // ── Tabs ──
@@ -379,81 +524,92 @@
             form.append('latitude', document.getElementById('site-lat').value || '0');
             form.append('longitude', document.getElementById('site-lon').value || '0');
             form.append('tags', document.getElementById('site-tags').value);
-
             await fetch('/api/sites', { method: 'POST', body: form });
             closeModal('new-site-modal');
             toast('Site created');
             loadDashboard();
         }
 
-        // ── Upload Files ──
-        async function handleFiles(files) {
-            if (!currentSiteId) return;
-            const name = document.getElementById('proj-name').value || `Survey — ${new Date().toLocaleDateString()}`;
+        // ── File Selection (step 1 — just selects, doesn't upload yet) ──
+        function onFilesSelected(files) {
+            selectedFiles = files;
+            const quality = document.getElementById('proj-quality').value;
+            const est = estimateTime(files.length, quality);
+
+            document.getElementById('drop-zone').style.display = 'none';
+            document.getElementById('upload-actions').style.display = 'block';
+            document.getElementById('file-summary').innerHTML =
+                `<b>${files.length}</b> images selected · Estimated processing time: <b>${est}</b>`;
+
+            updateTimeEstimate();
+        }
+
+        // ── Upload & Process (step 2 — triggered by button) ──
+        async function startUploadAndProcess() {
+            if (!currentSiteId || !selectedFiles) return;
+
+            const name = document.getElementById('proj-name').value || 'Survey — ' + new Date().toLocaleDateString();
             const quality = document.getElementById('proj-quality').value;
 
-            // Create project
+            // Show progress
+            document.getElementById('upload-actions').style.display = 'none';
+            document.getElementById('upload-status').style.display = 'block';
+            document.getElementById('upload-spinner').style.display = 'block';
+
+            // Step 1: Create project
+            setUploadStatus('Creating project...', 5);
             const form = new FormData();
             form.append('site_id', currentSiteId);
             form.append('name', name);
             form.append('quality', quality);
             const proj = await fetch('/api/projects', { method: 'POST', body: form }).then(r => r.json());
 
-            // Upload images
-            document.getElementById('upload-status').textContent = `Uploading ${files.length} images...`;
+            // Step 2: Upload images
+            setUploadStatus('Uploading ' + selectedFiles.length + ' images...', 15);
             const uploadForm = new FormData();
-            for (const f of files) uploadForm.append('files', f);
-            await fetch(`/api/projects/${proj.id}/upload`, { method: 'POST', body: uploadForm });
+            for (const f of selectedFiles) uploadForm.append('files', f);
+            await fetch('/api/projects/' + proj.id + '/upload', { method: 'POST', body: uploadForm });
 
-            document.getElementById('upload-status').textContent = `Uploaded ${files.length} images. Starting processing...`;
+            // Step 3: Start processing
+            setUploadStatus('Starting processing engine...', 30);
+            const { job_id } = await fetch('/api/projects/' + proj.id + '/process', { method: 'POST' }).then(r => r.json());
 
-            // Start processing
-            const { job_id } = await fetch(`/api/projects/${proj.id}/process`, { method: 'POST' }).then(r => r.json());
-            closeModal('new-project-modal');
-            toast('Processing started — this will take 15-45 minutes');
-            pollJob(job_id, proj.id);
+            setUploadStatus('Processing started! This will take ' + estimateTime(selectedFiles.length, quality), 35);
+
+            // Close modal after 2 seconds and start dashboard polling
+            setTimeout(() => {
+                closeModal('new-project-modal');
+                toast('Map is being created — ' + estimateTime(selectedFiles.length, quality));
+                loadDashboard();
+            }, 2000);
+        }
+
+        function setUploadStatus(text, pct) {
+            document.getElementById('upload-status-text').textContent = text;
+            document.getElementById('upload-progress-bar').style.width = pct + '%';
         }
 
         // ── FlytBase Import ──
         async function importFromFlytBase() {
             if (!currentSiteId) return;
-            const name = document.getElementById('fb-proj-name').value || `FlytBase Import — ${new Date().toLocaleDateString()}`;
+            const name = document.getElementById('fb-proj-name').value || 'FlytBase Import — ' + new Date().toLocaleDateString();
             const quality = document.getElementById('fb-quality').value;
 
-            // Create project
             const form = new FormData();
             form.append('site_id', currentSiteId);
             form.append('name', name);
             form.append('quality', quality);
             const proj = await fetch('/api/projects', { method: 'POST', body: form }).then(r => r.json());
 
-            // Import from FlytBase
             const importForm = new FormData();
             importForm.append('api_key', document.getElementById('fb-api-key').value);
             importForm.append('api_url', document.getElementById('fb-api-url').value);
             importForm.append('gallery_id', document.getElementById('fb-gallery-id').value);
 
-            const { job_id } = await fetch(`/api/projects/${proj.id}/import-flytbase`, { method: 'POST', body: importForm }).then(r => r.json());
+            await fetch('/api/projects/' + proj.id + '/import-flytbase', { method: 'POST', body: importForm });
             closeModal('new-project-modal');
-            toast('Importing from FlytBase... Processing will start automatically.');
-            pollJob(job_id, proj.id);
-        }
-
-        // ── Poll Job ──
-        async function pollJob(jobId, projectId) {
-            const check = async () => {
-                const job = await fetch(`/api/jobs/${jobId}`).then(r => r.json());
-                if (job.status === 'completed') {
-                    toast('Processing complete! Opening map...');
-                    setTimeout(() => location.href = `/project/${projectId}`, 1500);
-                } else if (job.status === 'failed') {
-                    toast('Processing failed: ' + job.message);
-                } else {
-                    toast(`${job.message} (${job.progress}%)`);
-                    setTimeout(check, 5000);
-                }
-            };
-            setTimeout(check, 3000);
+            toast('Importing from FlytBase — processing will start automatically');
+            loadDashboard();
         }
 
         // ── Drop Zone ──
@@ -461,7 +617,7 @@
         if (dz) {
             dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('dragover'); });
             dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
-            dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('dragover'); handleFiles(e.dataTransfer.files); });
+            dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('dragover'); onFilesSelected(e.dataTransfer.files); });
         }
 
         // ── Toast ──
@@ -469,19 +625,18 @@
             const t = document.getElementById('toast');
             t.textContent = msg;
             t.classList.add('show');
-            setTimeout(() => t.classList.remove('show'), 3000);
+            setTimeout(() => t.classList.remove('show'), 4000);
         }
 
         // ── Keyboard ──
         document.addEventListener('keydown', e => {
-            if (e.key === 'Escape') {
-                closeModal('new-site-modal');
-                closeModal('new-project-modal');
-            }
+            if (e.key === 'Escape') { closeModal('new-site-modal'); closeModal('new-project-modal'); }
         });
 
-        // Init
+        // ── Init + auto-refresh ──
         loadDashboard();
+        // Refresh dashboard every 30 seconds to catch status changes
+        setInterval(loadDashboard, 30000);
     </script>
 </body>
 </html>
