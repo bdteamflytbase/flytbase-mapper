@@ -327,6 +327,28 @@
         let selectedFiles = null;
         let activePollers = {};
 
+        // ── Friendly stage names (hide ODM internals) ──
+        function friendlyStage(message, progress, jobType) {
+            if (jobType === 'import') return 'Importing images from FlytBase...';
+            if (!message) return 'Preparing...';
+            const msg = message.toLowerCase();
+            // Map ODM stages to user-friendly text
+            if (msg.includes('queued')) return 'Queued — waiting to start';
+            if (msg.includes('opensfm') || msg.includes('open sfm')) return 'Analyzing image positions...';
+            if (msg.includes('openmvs') || msg.includes('open mvs') || msg.includes('dense')) return 'Building 3D point cloud...';
+            if (msg.includes('mesh')) return 'Creating 3D surface model...';
+            if (msg.includes('textur')) return 'Applying photo textures...';
+            if (msg.includes('georef')) return 'Georeferencing map...';
+            if (msg.includes('orthophoto') || msg.includes('ortho')) return 'Generating 2D map...';
+            if (msg.includes('dem') || msg.includes('dsm') || msg.includes('dtm')) return 'Computing elevation data...';
+            if (progress < 10) return 'Starting processing engine...';
+            if (progress < 30) return 'Analyzing images...';
+            if (progress < 60) return 'Building 3D reconstruction...';
+            if (progress < 80) return 'Generating map outputs...';
+            if (progress < 95) return 'Finalizing...';
+            return 'Almost done...';
+        }
+
         // ── Time Estimate based on image count and quality ──
         function estimateTime(imageCount, quality) {
             // Based on real benchmarks: M3 Mac ~1 min/image for medium
@@ -389,7 +411,8 @@
                     if (isCompleted) {
                         location.href = '/project/' + latest.id;
                     } else if (isProcessing) {
-                        toast('Processing in progress — ' + (activeJob ? activeJob.progress + '%' : 'please wait'));
+                        const msg = activeJob ? friendlyStage(activeJob.message, activeJob.progress, activeJob.type) + ' (' + activeJob.progress + '%)' : 'Processing — please wait';
+                        toast(msg);
                     } else {
                         toast('No completed map yet. Click + Project to start.');
                     }
@@ -398,14 +421,16 @@
                 // Status badge
                 let statusHtml = '';
                 if (isProcessing && activeJob) {
+                    const friendly = friendlyStage(activeJob.message, activeJob.progress, activeJob.type);
                     statusHtml = `
-                        <div style="padding:8px 16px;border-top:1px solid var(--fb-border);background:rgba(245,158,11,0.05);">
-                            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-                                <span style="font-size:11px;color:var(--fb-accent);font-weight:600;">Processing — ${activeJob.message || 'Working...'}</span>
-                                <span style="font-size:11px;font-family:var(--fb-mono);color:var(--fb-accent);font-weight:700;">${activeJob.progress}%</span>
+                        <div style="padding:10px 16px;border-top:1px solid var(--fb-border);background:linear-gradient(135deg, rgba(245,158,11,0.04), rgba(59,141,245,0.04));">
+                            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                                <div style="width:8px;height:8px;border-radius:50%;background:var(--fb-accent);animation:pulse 1.5s infinite;flex-shrink:0;"></div>
+                                <span style="font-size:12px;color:var(--fb-text);font-weight:500;flex:1;">${friendly}</span>
+                                <span style="font-size:12px;font-family:var(--fb-mono);color:var(--fb-accent);font-weight:700;">${activeJob.progress}%</span>
                             </div>
-                            <div style="height:3px;background:var(--fb-surface);border-radius:2px;overflow:hidden;">
-                                <div style="height:100%;background:var(--fb-accent);border-radius:2px;width:${activeJob.progress}%;transition:width 0.5s;"></div>
+                            <div style="height:4px;background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden;">
+                                <div style="height:100%;border-radius:2px;width:${activeJob.progress}%;transition:width 0.8s ease;background:linear-gradient(90deg, #f59e0b, #3b8df5);"></div>
                             </div>
                         </div>
                     `;
@@ -435,10 +460,11 @@
                     ${site.thumbnail_url && isCompleted
                         ? `<img class="site-card-thumb" src="${site.thumbnail_url}" alt="${site.name}" />`
                         : isProcessing
-                            ? `<div class="site-card-thumb placeholder" style="background:rgba(245,158,11,0.05);color:var(--fb-accent);">
+                            ? `<div class="site-card-thumb placeholder" style="background:linear-gradient(135deg, rgba(245,158,11,0.06), rgba(59,141,245,0.06));color:var(--fb-text-secondary);">
                                 <div style="text-align:center;">
-                                    <div class="spinner" style="width:24px;height:24px;border-width:2px;margin:0 auto 8px;border-top-color:var(--fb-accent);"></div>
-                                    <div style="font-size:12px;">${latest.image_count || 0} images processing...</div>
+                                    <div class="spinner" style="width:28px;height:28px;border-width:2px;margin:0 auto 10px;border-color:rgba(255,255,255,0.06);border-top-color:var(--fb-accent);"></div>
+                                    <div style="font-size:13px;font-weight:500;color:var(--fb-text);">${latest.image_count || 0} images</div>
+                                    <div style="font-size:11px;color:var(--fb-text-tertiary);margin-top:4px;">Creating your map...</div>
                                 </div>
                                </div>`
                             : `<div class="site-card-thumb placeholder">No survey data yet</div>`
@@ -455,6 +481,9 @@
                         <span class="stat"><span class="status-dot ${dotClass}"></span> <b>${site.project_count || 0}</b> project${site.project_count !== 1 ? 's' : ''}</span>
                         <span class="stat">${site.latitude > 0 ? site.latitude.toFixed(4) + ', ' + site.longitude.toFixed(4) : '—'}</span>
                         <button class="btn" style="font-size:11px;padding:4px 10px;" onclick="event.stopPropagation();openNewProjectModal('${site.id}')">+ Project</button>
+                        <button class="btn" style="font-size:11px;padding:4px 8px;color:var(--fb-destructive);border-color:rgba(248,113,113,0.2);" onclick="event.stopPropagation();deleteSite('${site.id}','${site.name.replace(/'/g,"\\'")}')" title="Delete site">
+                            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="width:12px;height:12px"><path d="M3 4h10M6 4V3h4v1M5 4v9h6V4"/></svg>
+                        </button>
                     </div>
                 `;
                 grid.appendChild(card);
@@ -626,6 +655,18 @@
             t.textContent = msg;
             t.classList.add('show');
             setTimeout(() => t.classList.remove('show'), 4000);
+        }
+
+        // ── Delete Site ──
+        async function deleteSite(siteId, siteName) {
+            if (!confirm('Delete "' + siteName + '" and all its projects?\n\nThis cannot be undone.')) return;
+            try {
+                await fetch('/api/sites/' + siteId, { method: 'DELETE' });
+                toast('"' + siteName + '" deleted');
+                loadDashboard();
+            } catch (e) {
+                toast('Failed to delete site');
+            }
         }
 
         // ── Keyboard ──

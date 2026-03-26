@@ -127,6 +127,30 @@ async def get_site(site_id: str):
     return result
 
 
+@app.delete("/api/sites/{site_id}")
+async def delete_site(site_id: str):
+    db = SessionLocal()
+    site = db.query(Site).filter_by(id=site_id).first()
+    if not site:
+        db.close()
+        raise HTTPException(404, "Site not found")
+    # Delete all related projects, outputs, jobs
+    for project in db.query(Project).filter_by(site_id=site_id).all():
+        db.query(Output).filter_by(project_id=project.id).delete()
+        db.query(Job).filter_by(project_id=project.id).delete()
+        # Clean up files
+        if project.image_dir:
+            import shutil
+            p = Path(project.image_dir).parent
+            if p.exists() and str(p).startswith(str(DATA_DIR)):
+                shutil.rmtree(p, ignore_errors=True)
+    db.query(Project).filter_by(site_id=site_id).delete()
+    db.delete(site)
+    db.commit()
+    db.close()
+    return {"status": "deleted", "site_id": site_id}
+
+
 @app.get("/api/sites/{site_id}/timeline")
 async def site_timeline(site_id: str):
     db = SessionLocal()
@@ -194,6 +218,26 @@ async def get_project(project_id: str):
     result = project.to_dict()
     db.close()
     return result
+
+
+@app.delete("/api/projects/{project_id}")
+async def delete_project(project_id: str):
+    db = SessionLocal()
+    project = db.query(Project).filter_by(id=project_id).first()
+    if not project:
+        db.close()
+        raise HTTPException(404, "Project not found")
+    db.query(Output).filter_by(project_id=project_id).delete()
+    db.query(Job).filter_by(project_id=project_id).delete()
+    if project.image_dir:
+        p = Path(project.image_dir).parent
+        if p.exists() and str(p).startswith(str(DATA_DIR)):
+            import shutil
+            shutil.rmtree(p, ignore_errors=True)
+    db.delete(project)
+    db.commit()
+    db.close()
+    return {"status": "deleted", "project_id": project_id}
 
 
 @app.get("/api/projects/{project_id}/gallery")
