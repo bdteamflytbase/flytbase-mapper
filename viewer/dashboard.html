@@ -854,6 +854,11 @@
             loadDashboard();
 
             // Step 2: Upload images in batches with progress bar
+            // Save state to localStorage so we can detect interrupted uploads
+            localStorage.setItem('mapper_upload', JSON.stringify({
+                projectId: proj.id, total: fileCount, uploaded: 0, startedAt: Date.now()
+            }));
+
             const BATCH_SIZE = 10;
             let uploaded = 0;
             for (let i = 0; i < filesToUpload.length; i += BATCH_SIZE) {
@@ -866,7 +871,14 @@
                 barCount.textContent = uploaded + ' / ' + fileCount;
                 barProgress.style.width = pct + '%';
                 barText.textContent = 'Uploading images... ' + pct + '%';
+                // Update localStorage with progress
+                localStorage.setItem('mapper_upload', JSON.stringify({
+                    projectId: proj.id, total: fileCount, uploaded: uploaded, startedAt: Date.now()
+                }));
+                // Refresh dashboard to show image count on card
+                if (uploaded % 30 === 0) loadDashboard();
             }
+            localStorage.removeItem('mapper_upload');
 
             // Step 3: Start processing
             barText.textContent = 'Starting processing...';
@@ -1108,10 +1120,28 @@
             if (e.key === 'Escape') { closeModal('new-site-modal'); closeModal('new-project-modal'); }
         });
 
+        // ── Resume interrupted uploads on page load ──
+        async function checkPendingUploads() {
+            try {
+                const projects = await fetch('/api/projects').then(r => r.json());
+                const uploading = projects.filter(p => p.status === 'created' && p.image_count > 0);
+                if (uploading.length > 0) {
+                    const p = uploading[0];
+                    const bar = document.getElementById('upload-bar');
+                    const barText = document.getElementById('upload-bar-text');
+                    const barCount = document.getElementById('upload-bar-count');
+                    bar.style.display = 'block';
+                    barText.textContent = 'Upload in progress (started before refresh)';
+                    barCount.textContent = p.image_count + ' images received';
+                    document.getElementById('upload-bar-progress').style.width = '50%';
+                }
+            } catch(e) {}
+        }
+
         // ── Init + auto-refresh ──
         loadDashboard();
-        // Refresh dashboard every 30 seconds to catch status changes
-        setInterval(loadDashboard, 30000);
+        checkPendingUploads();
+        setInterval(loadDashboard, 15000);
     </script>
 </body>
 </html>
