@@ -647,11 +647,12 @@
                     const uploadState = JSON.parse(localStorage.getItem('mapper_upload') || '{}');
                     const isActiveUpload = uploadState.projectId === latest.id;
                     const uploadTotal = isActiveUpload ? uploadState.total : 0;
-                    const uploadDone = isActiveUpload ? uploadState.uploaded : imgCount;
+                    // Use server image_count (most accurate) or localStorage, whichever is higher
+                    const uploadDone = Math.max(imgCount, isActiveUpload ? uploadState.uploaded : 0);
                     const uploadPct = uploadTotal > 0 ? Math.round(uploadDone / uploadTotal * 100) : (imgCount > 0 ? 100 : 0);
-                    const uploadText = isActiveUpload
+                    const uploadText = uploadTotal > 0 && uploadDone < uploadTotal
                         ? 'Uploading... ' + uploadDone + ' / ' + uploadTotal + ' images'
-                        : (latest.status === 'uploaded' ? 'Waiting to process — ' + imgCount + ' images' : 'Uploading images' + (imgCount > 0 ? ' — ' + imgCount + ' received' : ''));
+                        : (latest.status === 'uploaded' ? 'Upload complete — ' + imgCount + ' images ready' : (imgCount > 0 ? 'Received ' + imgCount + ' images...' : 'Starting upload...'));
                     statusHtml = `
                         <div style="padding:10px 16px;border-top:1px solid var(--fb-border);background:linear-gradient(135deg, rgba(59,141,245,0.04), rgba(52,211,153,0.04));">
                             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
@@ -1167,7 +1168,12 @@
         // ── Init + auto-refresh ──
         loadDashboard();
         checkPendingUploads();
-        setInterval(loadDashboard, 15000);
+        // Fast refresh during uploads, slower otherwise
+        setInterval(() => {
+            const hasUpload = localStorage.getItem('mapper_upload');
+            loadDashboard();
+        }, hasUpload ? 8000 : 20000);
+        setInterval(loadDashboard, 10000);
     </script>
 </body>
 </html>
