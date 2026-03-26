@@ -1,0 +1,3139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlytBase — Site Intelligence</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+    /* Smooth wheel zoom — zooms in place without panning */
+    (function(){
+        L.Map.mergeOptions({ smoothWheelZoom: true, smoothSensitivity: 1 });
+        L.Map.SmoothWheelZoom = L.Handler.extend({
+            addHooks: function () {
+                L.DomEvent.on(this._map._container, 'wheel', this._onWheelScroll, this);
+                this._targetZoom = null;
+            },
+            removeHooks: function () {
+                L.DomEvent.off(this._map._container, 'wheel', this._onWheelScroll, this);
+            },
+            _onWheelScroll: function (e) {
+                L.DomEvent.preventDefault(e);
+                L.DomEvent.stopPropagation(e);
+                var map = this._map;
+                var delta = -e.deltaY;
+                if (e.deltaMode === 1) delta *= 20;
+                var sensitivity = map.options.smoothSensitivity || 1;
+                if (this._targetZoom === null) this._targetZoom = map.getZoom();
+                this._targetZoom += delta * 0.001 * sensitivity;
+                this._targetZoom = Math.max(map.getMinZoom(), Math.min(map.getMaxZoom(), this._targetZoom));
+                /* Zoom around the current map center — no panning */
+                map.setZoom(this._targetZoom, { animate: false });
+                clearTimeout(this._timer);
+                var self = this;
+                this._timer = setTimeout(function(){ self._targetZoom = null; }, 200);
+            }
+        });
+        L.Map.addInitHook('addHandler', 'smoothWheelZoom', L.Map.SmoothWheelZoom);
+    })();
+    </script>
+    <style>
+        /* ══════════════════════════════════════════
+           FLYTBASE MAPPER — Deep Space Command
+           ══════════════════════════════════════════ */
+        :root {
+            --fb-bg: #080d16;
+            --fb-surface: rgba(16, 22, 36, 0.85);
+            --fb-surface-solid: #111827;
+            --fb-surface-hover: rgba(30, 42, 65, 0.6);
+            --fb-surface-active: #1e2d44;
+            --fb-border: rgba(255, 255, 255, 0.07);
+            --fb-border-active: rgba(44, 123, 242, 0.5);
+            --fb-primary: #3b8df5;
+            --fb-primary-hover: #2570d4;
+            --fb-primary-subtle: rgba(59, 141, 245, 0.1);
+            --fb-accent: #f59e0b;
+            --fb-accent-deep: #d97706;
+            --fb-text: #eef1f6;
+            --fb-text-secondary: #8899af;
+            --fb-text-tertiary: #4a5568;
+            --fb-success: #34d399;
+            --fb-destructive: #f87171;
+            --fb-radius: 10px;
+            --fb-radius-lg: 14px;
+            --fb-radius-xl: 18px;
+            --fb-font: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            --fb-mono: 'JetBrains Mono', 'SF Mono', monospace;
+            --fb-transition: 220ms cubic-bezier(0.16, 1, 0.3, 1);
+            --fb-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.05);
+            --fb-shadow-lg: 0 8px 32px rgba(0,0,0,0.1);
+            --grad-teal: linear-gradient(135deg, #11998e, #38ef7d);
+            --grad-blue: linear-gradient(135deg, #1e83ec, #00cdff);
+            --grad-orange: linear-gradient(135deg, #ffc837, #ff6a08);
+            --grad-mixed: linear-gradient(135deg, #11998e 0%, #1e83ec 50%, #2C7BF2 100%);
+        }
+
+        /* ── Reset & Base ── */
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: var(--fb-font);
+            background: var(--fb-bg);
+            color: var(--fb-text);
+            overflow: hidden;
+            height: 100vh;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* Grain overlay — subtle paper texture */
+        body::after {
+            content: '';
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 9999;
+            opacity: 0.035;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+            background-size: 200px;
+        }
+
+        /* Dot grid background */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: -1;
+            background-image: radial-gradient(circle, rgba(59, 141, 245, 0.035) 1px, transparent 1px);
+            background-size: 28px 28px;
+        }
+
+        /* ── Layout ── */
+        .app { display: flex; height: 100vh; }
+
+        /* ══════════════════════════════════════════
+           Sidebar — Icon Rail + Expand
+           ══════════════════════════════════════════ */
+        .sidebar {
+            width: 260px;
+            min-width: 260px;
+            background: rgba(8, 13, 22, 0.92);
+            backdrop-filter: blur(20px);
+            border-right: 1px solid var(--fb-border);
+            display: flex;
+            flex-direction: column;
+            z-index: 200;
+            position: relative;
+            transition: width 300ms cubic-bezier(0.16, 1, 0.3, 1), min-width 300ms cubic-bezier(0.16, 1, 0.3, 1);
+            overflow: hidden;
+        }
+
+        .sidebar.collapsed {
+            width: 56px;
+            min-width: 56px;
+        }
+
+        /* Hide text elements when collapsed — use clip not display for smooth transition */
+        .sidebar .nav-label,
+        .sidebar .badge,
+        .sidebar .sidebar-section-title,
+        .sidebar .sidebar-footer,
+        .sidebar .app-badge {
+            transition: opacity 200ms, transform 200ms;
+            white-space: nowrap;
+        }
+
+        .sidebar.collapsed .nav-label,
+        .sidebar.collapsed .badge,
+        .sidebar.collapsed .sidebar-section-title,
+        .sidebar.collapsed .sidebar-footer,
+        .sidebar.collapsed .app-badge {
+            opacity: 0;
+            transform: translateX(-8px);
+            pointer-events: none;
+            position: absolute;
+            overflow: hidden;
+            width: 0;
+            height: 0;
+        }
+
+        .sidebar.collapsed .sidebar-header { padding: 16px 0; justify-content: center; border-color: transparent; }
+        .sidebar.collapsed .logo-row { justify-content: center; margin: 0; }
+        .sidebar.collapsed .logo-row svg { height: 16px; }
+        .sidebar.collapsed .sidebar-section { padding: 6px 8px 2px; }
+        .sidebar.collapsed .nav-item { justify-content: center; padding: 10px 0; border-radius: 8px; margin: 2px 6px; }
+        .sidebar.collapsed .nav-item .icon { width: 20px; height: 20px; }
+
+        /* Collapse button — lives OUTSIDE sidebar to avoid overflow clip */
+        .sidebar-collapse-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 24px;
+            height: 24px;
+            position: fixed;
+            left: 248px; /* 260px sidebar - 12px half-button */
+            top: 28px;
+            z-index: 999;
+            background: #111827;
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 50%;
+            color: var(--fb-text-tertiary);
+            cursor: pointer;
+            transition: all var(--fb-transition);
+            box-shadow: var(--fb-shadow);
+        }
+
+        .sidebar-collapse-btn:hover { background: var(--fb-primary); color: white; border-color: var(--fb-primary); box-shadow: 0 2px 12px rgba(30, 111, 223, 0.25); }
+        .sidebar-collapse-btn svg { transition: transform 300ms cubic-bezier(0.16, 1, 0.3, 1); }
+        .sidebar-collapse-btn.is-collapsed { left: 44px; }
+        .sidebar-collapse-btn.is-collapsed svg { transform: rotate(180deg); }
+
+        /* ── Gallery ── */
+        .gallery-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 8px;
+            padding: 16px;
+            overflow-y: scroll;
+            overflow-x: hidden;
+            flex: 1 1 0;
+            min-height: 0; /* critical for flex overflow to work */
+        }
+
+        /* Collapsible folders */
+        .flight-folder { margin-bottom: 16px; }
+        .flight-folder-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 8px;
+            border-bottom: 1px solid var(--fb-border);
+            margin-bottom: 10px;
+            cursor: pointer;
+            user-select: none;
+            border-radius: var(--fb-radius);
+            transition: background var(--fb-transition);
+        }
+        .flight-folder-header:hover { background: var(--fb-surface-hover); }
+        .flight-folder-header .chevron {
+            transition: transform 200ms;
+            flex-shrink: 0;
+            color: var(--fb-text-tertiary);
+        }
+        .flight-folder.collapsed .chevron { transform: rotate(-90deg); }
+        .flight-folder.collapsed .flight-folder-grid { display: none; }
+        .flight-folder-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+            gap: 8px;
+        }
+
+        /* ── Compare View (M3) ── */
+        .compare-container {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+            cursor: col-resize;
+            user-select: none;
+        }
+
+        .compare-layer {
+            position: absolute;
+            inset: 0;
+        }
+
+        .compare-layer img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            background: var(--fb-bg);
+        }
+
+        .compare-layer.right {
+            clip-path: inset(0 0 0 var(--split, 50%));
+        }
+
+        .compare-slider {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            left: var(--split, 50%);
+            width: 3px;
+            background: white;
+            z-index: 10;
+            cursor: col-resize;
+            box-shadow: 0 0 12px rgba(0,0,0,0.5);
+        }
+
+        .compare-slider::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: var(--fb-surface-solid);
+            border: 2px solid white;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.4);
+        }
+
+        .compare-slider::after {
+            content: '\2194';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 18px;
+            color: white;
+            z-index: 1;
+        }
+
+        .compare-label {
+            position: absolute;
+            top: 16px;
+            padding: 6px 14px;
+            background: rgba(8, 13, 22, 0.85);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--fb-border);
+            border-radius: var(--fb-radius);
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--fb-text);
+            z-index: 5;
+            pointer-events: none;
+        }
+
+        .compare-label.left { left: 16px; }
+        .compare-label.right { right: 16px; }
+
+        .compare-label .date {
+            font-family: var(--fb-mono);
+            font-weight: 400;
+            color: var(--fb-text-secondary);
+            font-size: 11px;
+            margin-top: 2px;
+        }
+
+        .compare-hint {
+            position: absolute;
+            bottom: 70px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 8px 16px;
+            background: rgba(8, 13, 22, 0.85);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--fb-border);
+            border-radius: var(--fb-radius);
+            font-size: 12px;
+            color: var(--fb-text-tertiary);
+            z-index: 5;
+        }
+
+        /* ── Timeline Bar (M3) ── */
+        .timeline-bar {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 56px;
+            background: rgba(8, 13, 22, 0.92);
+            backdrop-filter: blur(16px);
+            border-top: 1px solid var(--fb-border);
+            display: flex;
+            align-items: center;
+            padding: 0 24px;
+            z-index: 10;
+            gap: 16px;
+        }
+
+        .timeline-track {
+            flex: 1;
+            height: 4px;
+            background: rgba(255,255,255,0.06);
+            border-radius: 2px;
+            position: relative;
+            cursor: pointer;
+        }
+
+        .timeline-dot {
+            position: absolute;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: var(--fb-primary);
+            border: 2px solid var(--fb-surface-solid);
+            cursor: pointer;
+            transition: all var(--fb-transition);
+            z-index: 2;
+        }
+
+        .timeline-dot:hover { transform: translate(-50%, -50%) scale(1.3); box-shadow: 0 0 12px rgba(59, 141, 245, 0.4); }
+        .timeline-dot.active { background: var(--fb-accent); box-shadow: 0 0 12px rgba(245, 158, 11, 0.4); }
+        .timeline-dot.selected { outline: 2px solid white; outline-offset: 2px; }
+
+        .timeline-label {
+            font-size: 10px;
+            font-family: var(--fb-mono);
+            color: var(--fb-text-tertiary);
+            white-space: nowrap;
+        }
+
+        .timeline-mode-btns { display: flex; gap: 4px; }
+
+        /* ── Annotations (M3) ── */
+        .annotation-marker {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: var(--fb-accent);
+            border: 2px solid white;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 700;
+            color: white;
+            transition: transform 0.15s;
+        }
+
+        .annotation-marker:hover { transform: scale(1.2); }
+
+        .annotation-popup {
+            background: rgba(8, 13, 22, 0.95);
+            backdrop-filter: blur(16px);
+            border: 1px solid var(--fb-border);
+            border-radius: var(--fb-radius);
+            padding: 12px;
+            min-width: 200px;
+            max-width: 280px;
+        }
+
+        .annotation-popup .ann-type { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 4px; }
+        .annotation-popup .ann-type.note { color: var(--fb-primary); }
+        .annotation-popup .ann-type.issue { color: var(--fb-destructive); }
+        .annotation-popup .ann-type.measurement { color: var(--fb-success); }
+        .annotation-popup .ann-text { font-size: 13px; color: var(--fb-text); }
+        .annotation-popup .ann-date { font-size: 10px; color: var(--fb-text-tertiary); margin-top: 6px; font-family: var(--fb-mono); }
+
+        /* ── Measurement Tools (M5) ── */
+        .measure-toolbar {
+            position: absolute;
+            bottom: 72px;
+            left: 16px;
+            display: flex;
+            gap: 4px;
+            z-index: 40;
+        }
+
+        .measure-result {
+            position: absolute;
+            bottom: 72px;
+            right: 16px;
+            background: rgba(8, 13, 22, 0.92);
+            backdrop-filter: blur(16px);
+            border: 1px solid var(--fb-border);
+            border-radius: var(--fb-radius);
+            padding: 10px 16px;
+            z-index: 40;
+            display: none;
+        }
+
+        .measure-result.show { display: block; }
+        .measure-result .value { font-size: 20px; font-weight: 700; font-family: var(--fb-mono); color: var(--fb-success); }
+        .measure-result .unit { font-size: 12px; color: var(--fb-text-tertiary); }
+
+        /* ── Elevation Legend ── */
+        .elevation-legend {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(8, 13, 22, 0.92);
+            backdrop-filter: blur(16px);
+            border: 1px solid var(--fb-border);
+            border-radius: var(--fb-radius-lg);
+            padding: 14px 18px;
+            z-index: 40;
+            min-width: 240px;
+        }
+
+        .elevation-legend::before {
+            content: '';
+            position: absolute;
+            top: -1px; left: 16px; right: 16px;
+            height: 1px;
+            background: var(--grad-mixed);
+            opacity: 0.4;
+            border-radius: 1px;
+        }
+
+        .legend-title {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--fb-text);
+            margin-bottom: 10px;
+        }
+
+        .legend-bar {
+            height: 10px;
+            border-radius: 5px;
+            margin-bottom: 6px;
+        }
+
+        .legend-labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: 10px;
+            font-family: var(--fb-mono);
+            color: var(--fb-text-secondary);
+            margin-bottom: 8px;
+        }
+
+        .legend-desc {
+            font-size: 10px;
+            color: var(--fb-text-tertiary);
+            line-height: 1.4;
+        }
+
+        .gallery-card {
+            position: relative;
+            border-radius: var(--fb-radius);
+            overflow: hidden;
+            cursor: pointer;
+            border: 1px solid var(--fb-border);
+            transition: all 280ms cubic-bezier(0.16, 1, 0.3, 1);
+            background: rgba(255,255,255,0.03);
+        }
+
+        .gallery-card:hover { border-color: rgba(44, 123, 242, 0.3); transform: translateY(-3px) scale(1.01); box-shadow: 0 8px 32px rgba(44, 123, 242, 0.1); }
+
+        .gallery-card img {
+            width: 100%;
+            aspect-ratio: 4/3;
+            object-fit: cover;
+            display: block;
+        }
+
+        .gallery-card .gallery-meta {
+            padding: 8px 10px;
+            font-size: 10px;
+        }
+
+        .gallery-card .gallery-name {
+            font-weight: 500;
+            font-size: 10px;
+            color: var(--fb-text-secondary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            font-family: var(--fb-mono);
+        }
+
+        .gallery-card .gallery-info {
+            color: var(--fb-text-tertiary);
+            margin-top: 2px;
+            font-family: var(--fb-mono);
+            font-size: 9px;
+        }
+
+        .gallery-card .gallery-badge {
+            position: absolute;
+            top: 6px;
+            right: 6px;
+            background: rgba(8, 13, 22, 0.75);
+            backdrop-filter: blur(8px);
+            padding: 3px 7px;
+            border-radius: 5px;
+            font-size: 9px;
+            font-weight: 600;
+            font-family: var(--fb-mono);
+            color: rgba(255,255,255,0.7);
+        }
+
+        /* Lightbox */
+        .lightbox {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.9);
+            z-index: 600;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            cursor: zoom-out;
+        }
+
+        .lightbox.show { display: flex; }
+
+        .lightbox img {
+            max-width: 90vw;
+            max-height: 85vh;
+            border-radius: var(--fb-radius);
+            box-shadow: var(--fb-shadow-lg);
+        }
+
+        .lightbox-info {
+            margin-top: 12px;
+            font-size: 13px;
+            color: var(--fb-text-secondary);
+            text-align: center;
+        }
+
+        .lightbox-nav {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(8, 13, 22, 0.88);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 50%;
+            width: 44px;
+            height: 44px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--fb-text);
+            cursor: pointer;
+            font-size: 20px;
+            transition: all var(--fb-transition);
+        }
+
+        .lightbox-nav:hover { background: rgba(59, 141, 245, 0.2); border-color: rgba(59, 141, 245, 0.4); }
+        .lightbox-nav.prev { left: 20px; }
+        .lightbox-nav.next { right: 20px; }
+
+        .gallery-topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--fb-border);
+            min-height: 44px;
+        }
+
+        .gallery-count { font-size: 12px; color: var(--fb-text-tertiary); }
+
+        .sidebar-header {
+            padding: 20px 16px 16px;
+            border-bottom: 1px solid var(--fb-border);
+            transition: padding 300ms, border-color 300ms;
+        }
+
+        .logo-row { display: flex; align-items: center; gap: 10px; margin-bottom: 0; transition: justify-content 300ms; }
+        .logo-row svg { height: 20px; width: auto; }
+
+        .app-badge {
+            font-size: 9px;
+            font-weight: 700;
+            color: white;
+            background: var(--grad-mixed);
+            padding: 3px 9px;
+            border-radius: 6px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            border: none;
+        }
+
+        .sidebar-section { padding: 12px 10px 4px; }
+
+        .sidebar-section-title {
+            font-size: 10px;
+            font-weight: 700;
+            color: var(--fb-text-tertiary);
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            padding: 0 8px 8px;
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 9px 12px;
+            border-radius: var(--fb-radius);
+            cursor: pointer;
+            transition: all var(--fb-transition);
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--fb-text-secondary);
+            user-select: none;
+            position: relative;
+            margin: 1px 0;
+        }
+
+        .nav-item:hover {
+            background: rgba(255,255,255,0.04);
+            color: var(--fb-text);
+        }
+
+        /* Active: gradient left bar */
+        .nav-item.active {
+            background: var(--fb-primary-subtle);
+            color: var(--fb-text);
+        }
+        .nav-item.active::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 6px;
+            bottom: 6px;
+            width: 3px;
+            border-radius: 0 3px 3px 0;
+            background: var(--grad-blue);
+            box-shadow: 0 0 12px rgba(30, 131, 236, 0.4);
+        }
+        .sidebar.collapsed .nav-item.active::before { display: none; }
+        .sidebar.collapsed .nav-item.active { background: var(--fb-primary-subtle); }
+
+        .nav-item .icon {
+            width: 18px; height: 18px;
+            display: flex; align-items: center; justify-content: center;
+            opacity: 0.5;
+            flex-shrink: 0;
+            transition: opacity var(--fb-transition);
+        }
+        .nav-item:hover .icon { opacity: 0.8; }
+        .nav-item.active .icon { opacity: 1; color: var(--fb-primary); }
+
+        .nav-item .badge {
+            margin-left: auto;
+            font-size: 10px;
+            font-weight: 600;
+            font-family: var(--fb-mono);
+            color: var(--fb-text-tertiary);
+            background: rgba(0,0,0,0.04);
+            padding: 2px 7px;
+            border-radius: 5px;
+        }
+        .nav-item.active .badge { background: rgba(44, 123, 242, 0.1); color: rgba(44, 123, 242, 0.7); }
+
+        .sidebar-footer {
+            margin-top: auto;
+            padding: 14px;
+            border-top: 1px solid var(--fb-border);
+        }
+
+        .site-info {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid var(--fb-border);
+            border-radius: var(--fb-radius);
+            padding: 12px;
+            position: relative;
+            overflow: hidden;
+        }
+        /* Subtle gradient shimmer on site info */
+        .site-info::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 1px;
+            background: var(--grad-mixed);
+            opacity: 0.3;
+        }
+
+        .site-info-label { font-size: 10px; font-weight: 700; color: var(--fb-text-tertiary); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+        .site-info-name { font-size: 13px; font-weight: 600; color: var(--fb-text); margin-bottom: 3px; }
+        .site-info-meta { font-size: 11px; color: var(--fb-text-secondary); }
+        .site-info-coords { font-size: 11px; color: var(--fb-text-tertiary); font-family: var(--fb-mono); margin-top: 6px; }
+
+        /* ── Main Content ── */
+        .main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* Topbar with gradient underline */
+        .topbar {
+            height: 52px;
+            min-height: 52px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+            border-bottom: 1px solid var(--fb-border);
+            background: rgba(8, 13, 22, 0.88);
+            backdrop-filter: blur(16px);
+            z-index: 50;
+            position: relative;
+        }
+        .topbar::after {
+            content: '';
+            position: absolute;
+            bottom: -1px;
+            left: 0; right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, #11998e, #1e83ec, #3b8df5, #f59e0b);
+            opacity: 0.7;
+        }
+
+        .topbar-left { display: flex; align-items: center; gap: 16px; }
+        .topbar-title { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; }
+        .topbar-subtitle { font-size: 11px; color: var(--fb-text-tertiary); font-family: var(--fb-mono); font-weight: 400; }
+        .topbar-right { display: flex; align-items: center; gap: 8px; }
+
+        /* ── Buttons ── */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 7px 14px;
+            border-radius: var(--fb-radius);
+            font-size: 12px;
+            font-weight: 500;
+            font-family: var(--fb-font);
+            cursor: pointer;
+            transition: all var(--fb-transition);
+            border: 1px solid var(--fb-border);
+            background: var(--fb-surface);
+            color: var(--fb-text-secondary);
+            user-select: none;
+            backdrop-filter: blur(8px);
+        }
+
+        .btn:hover { background: var(--fb-surface-hover); color: var(--fb-text); border-color: rgba(255,255,255,0.12); }
+
+        .btn.active {
+            background: var(--fb-primary-subtle);
+            color: var(--fb-primary);
+            border-color: rgba(30, 111, 223, 0.2);
+            box-shadow: 0 0 12px rgba(59, 141, 245, 0.15);
+        }
+
+        .btn-primary {
+            background: var(--fb-primary);
+            color: white;
+            border-color: transparent;
+            box-shadow: 0 2px 12px rgba(30, 111, 223, 0.25);
+        }
+        .btn-primary:hover { background: var(--fb-primary-hover); color: white; box-shadow: 0 4px 16px rgba(30, 111, 223, 0.3); }
+
+        .btn-icon { padding: 7px 9px; }
+        .btn svg { width: 14px; height: 14px; }
+        .divider-v { width: 1px; height: 20px; background: var(--fb-border); }
+
+        /* View Panels */
+        .view-panel {
+            flex: 1;
+            position: relative;
+            display: none;
+        }
+
+        .view-panel.active { display: flex; }
+
+        /* Orthomosaic View */
+        #ortho-view {
+            flex-direction: column;
+        }
+
+        #ortho-container {
+            flex: 1;
+            background: var(--fb-bg);
+        }
+
+        /* ── Leaflet Overrides ── */
+        .leaflet-container { background: #080d16 !important; font-family: var(--fb-font) !important; }
+        .leaflet-image-layer { image-rendering: auto; }
+        .leaflet-zoom-anim .leaflet-image-layer { transition: transform 0.25s cubic-bezier(0, 0, 0.25, 1); }
+
+        .leaflet-control-zoom {
+            border: none !important;
+            border-radius: var(--fb-radius) !important;
+            overflow: hidden;
+            box-shadow: var(--fb-shadow) !important;
+        }
+        .leaflet-control-zoom a {
+            background: var(--fb-surface-solid) !important;
+            color: var(--fb-text-secondary) !important;
+            border-color: var(--fb-border) !important;
+            width: 34px !important;
+            height: 34px !important;
+            line-height: 34px !important;
+            font-size: 16px !important;
+        }
+        .leaflet-control-zoom a:hover { background: rgba(59, 141, 245, 0.15) !important; color: var(--fb-primary) !important; }
+        .leaflet-bar a + a { border-top-color: var(--fb-border) !important; }
+
+        /* 3D View */
+        #model-view {
+            flex-direction: column;
+        }
+
+        #model-container {
+            flex: 1;
+            position: relative;
+        }
+
+        #model-container canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* DSM / DTM Views */
+        #dsm-view, #dtm-view {
+            flex-direction: column;
+            position: relative;
+        }
+
+        #dsm-map-container, #dtm-map-container {
+            flex: 1;
+            min-height: 0;
+        }
+
+        /* ── Floating Stats Panel — gradient border glow ── */
+        .stats-panel {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(8, 13, 22, 0.9);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: var(--fb-radius-lg);
+            padding: 16px 20px;
+            z-index: 40;
+            display: flex;
+            gap: 28px;
+        }
+        /* Gradient top border */
+        .stats-panel::before {
+            content: '';
+            position: absolute;
+            top: -1px; left: 12px; right: 12px;
+            height: 1px;
+            background: var(--grad-mixed);
+            opacity: 0.4;
+            border-radius: 1px;
+        }
+
+        .stat-item { display: flex; flex-direction: column; }
+        .stat-value { font-size: 17px; font-weight: 700; color: var(--fb-text); line-height: 1; font-family: var(--fb-mono); letter-spacing: -0.02em; }
+        .stat-value.accent { color: var(--fb-accent); }
+        .stat-value.primary { color: var(--fb-primary); }
+        .stat-value.success { color: var(--fb-success); }
+        .stat-label { font-size: 10px; color: var(--fb-text-tertiary); margin-top: 5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+
+        /* ── Floating Toolbar ── */
+        .float-toolbar {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            z-index: 40;
+        }
+        .float-toolbar .btn { box-shadow: var(--fb-shadow); }
+
+        /* ── Zoom Indicator ── */
+        .zoom-indicator {
+            position: absolute;
+            top: 16px;
+            left: 16px;
+            background: rgba(8, 13, 22, 0.9);
+            backdrop-filter: blur(16px);
+            border: 1px solid var(--fb-border);
+            border-radius: var(--fb-radius);
+            padding: 6px 12px;
+            font-size: 11px;
+            font-weight: 500;
+            color: var(--fb-text-secondary);
+            z-index: 40;
+            font-family: var(--fb-mono);
+        }
+        .zoom-indicator span { color: var(--fb-primary); font-weight: 600; }
+
+        /* ── Loading ── */
+        .loader {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: var(--fb-bg);
+            z-index: 200;
+            transition: opacity 0.5s;
+        }
+        .loader.hidden { opacity: 0; pointer-events: none; }
+
+        .spinner {
+            width: 28px;
+            height: 28px;
+            border: 2px solid rgba(44, 123, 242, 0.1);
+            border-top-color: var(--fb-primary);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .loader p { font-size: 12px; color: var(--fb-text-tertiary); margin-top: 14px; font-family: var(--fb-mono); }
+
+        /* ── Toast ── */
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            background: rgba(10, 16, 28, 0.95);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: var(--fb-radius);
+            padding: 10px 18px;
+            font-size: 13px;
+            color: var(--fb-text);
+            box-shadow: var(--fb-shadow-lg);
+            z-index: 1000;
+            transform: translateY(80px);
+            opacity: 0;
+            transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .toast.show { transform: translateY(0); opacity: 1; }
+
+        /* ── Modal ── */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.7);
+            backdrop-filter: blur(8px);
+            z-index: 500;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal {
+            background: rgba(10, 16, 28, 0.98);
+            border: 1px solid var(--fb-border);
+            border-radius: var(--fb-radius-xl);
+            width: 520px;
+            max-height: 80vh;
+            overflow: hidden;
+            box-shadow: 0 24px 80px rgba(0,0,0,0.6);
+            position: relative;
+        }
+        .modal::before {
+            content: '';
+            position: absolute;
+            top: -1px; left: 20%; right: 20%;
+            height: 1px;
+            background: var(--grad-blue);
+            opacity: 0.5;
+        }
+
+        .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 20px 24px 16px; border-bottom: 1px solid var(--fb-border); }
+        .modal-header h3 { font-size: 16px; font-weight: 600; }
+        .modal-close { background: none; border: none; color: var(--fb-text-tertiary); cursor: pointer; padding: 4px 8px; border-radius: 6px; font-size: 18px; line-height: 1; transition: all var(--fb-transition); }
+        .modal-close:hover { color: var(--fb-text); background: rgba(255,255,255,0.05); }
+        .modal-body { padding: 16px 24px 24px; overflow-y: auto; max-height: 60vh; }
+
+        .export-row { display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: var(--fb-radius); transition: background var(--fb-transition); }
+        .export-row:hover { background: rgba(255,255,255,0.03); }
+        .export-icon { font-size: 20px; width: 32px; text-align: center; }
+        .export-info { flex: 1; }
+        .export-name { font-size: 13px; font-weight: 600; color: var(--fb-text); }
+        .export-meta { font-size: 11px; color: var(--fb-text-tertiary); margin-top: 2px; font-family: var(--fb-mono); }
+
+        /* ── Scrollbar ── */
+        ::-webkit-scrollbar { width: 5px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.15); }
+
+        /* ── Right Sidebar ── */
+        .right-sidebar {
+            width: 280px;
+            min-width: 280px;
+            background: rgba(8, 13, 22, 0.92);
+            backdrop-filter: blur(20px);
+            border-left: 1px solid var(--fb-border);
+            display: flex;
+            flex-direction: column;
+            z-index: 200;
+            position: relative;
+            transition: width 300ms cubic-bezier(0.16, 1, 0.3, 1), min-width 300ms cubic-bezier(0.16, 1, 0.3, 1), opacity 300ms;
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+
+        .right-sidebar.collapsed {
+            width: 0px;
+            min-width: 0px;
+            border-left-color: transparent;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .right-sidebar::before {
+            content: '';
+            position: absolute;
+            top: -1px; left: 16px; right: 16px;
+            height: 1px;
+            background: var(--grad-mixed);
+            opacity: 0.4;
+            border-radius: 1px;
+        }
+
+        .right-sidebar-collapse-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 24px;
+            height: 24px;
+            position: fixed;
+            right: 268px;
+            top: 28px;
+            z-index: 999;
+            background: #111827;
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 50%;
+            color: var(--fb-text-tertiary);
+            cursor: pointer;
+            transition: all var(--fb-transition);
+            box-shadow: var(--fb-shadow);
+        }
+
+        .right-sidebar-collapse-btn:hover { background: var(--fb-primary); color: white; border-color: var(--fb-primary); box-shadow: 0 2px 12px rgba(30, 111, 223, 0.25); }
+        .right-sidebar-collapse-btn svg { transition: transform 300ms cubic-bezier(0.16, 1, 0.3, 1); }
+        .right-sidebar-collapse-btn.is-collapsed { right: 8px; }
+        .right-sidebar-collapse-btn.is-collapsed svg { transform: rotate(180deg); }
+
+        .rp-section {
+            padding: 16px;
+            border-bottom: 1px solid var(--fb-border);
+        }
+
+        .rp-section:last-child { border-bottom: none; }
+
+        .rp-section-title {
+            font-size: 10px;
+            font-weight: 700;
+            color: var(--fb-text-tertiary);
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            margin-bottom: 10px;
+        }
+
+        .rp-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            margin-bottom: 6px;
+        }
+
+        .rp-row:last-child { margin-bottom: 0; }
+
+        .rp-label {
+            font-size: 11px;
+            color: var(--fb-text-secondary);
+        }
+
+        .rp-value {
+            font-size: 12px;
+            font-weight: 600;
+            font-family: var(--fb-mono);
+            color: var(--fb-text);
+        }
+
+        .rp-value.accent { color: var(--fb-accent); }
+        .rp-value.primary { color: var(--fb-primary); }
+        .rp-value.success { color: var(--fb-success); }
+
+        .rp-measurement-empty {
+            font-size: 11px;
+            color: var(--fb-text-tertiary);
+            font-style: italic;
+            padding: 8px 0;
+        }
+
+        .rp-measurement-result {
+            padding: 8px 0;
+        }
+
+        .rp-measurement-result .rp-meas-val {
+            font-size: 20px;
+            font-weight: 700;
+            font-family: var(--fb-mono);
+            color: var(--fb-success);
+            line-height: 1;
+        }
+
+        .rp-measurement-result .rp-meas-label {
+            font-size: 10px;
+            color: var(--fb-text-tertiary);
+            margin-top: 4px;
+        }
+
+        /* Area complete button */
+        .area-complete-btn {
+            position: absolute;
+            z-index: 1000;
+            background: var(--fb-success);
+            color: #080d16;
+            border: none;
+            border-radius: var(--fb-radius);
+            padding: 6px 14px;
+            font-size: 12px;
+            font-weight: 700;
+            font-family: var(--fb-font);
+            cursor: pointer;
+            box-shadow: 0 2px 12px rgba(52, 211, 153, 0.4);
+            transition: all var(--fb-transition);
+            pointer-events: auto;
+        }
+        .area-complete-btn:hover { background: #2bc48a; transform: scale(1.05); }
+
+        /* Running perimeter label */
+        .measure-running-label {
+            position: absolute;
+            z-index: 999;
+            background: rgba(8, 13, 22, 0.9);
+            backdrop-filter: blur(8px);
+            border: 1px solid var(--fb-border);
+            border-radius: 6px;
+            padding: 4px 8px;
+            font-size: 11px;
+            font-family: var(--fb-mono);
+            color: var(--fb-success);
+            pointer-events: none;
+            white-space: nowrap;
+        }
+
+        /* 3D Measurement styles */
+        .measure3d-result {
+            position: absolute;
+            bottom: 72px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(8, 13, 22, 0.92);
+            backdrop-filter: blur(16px);
+            border: 1px solid var(--fb-border);
+            border-radius: var(--fb-radius);
+            padding: 10px 16px;
+            z-index: 40;
+            display: none;
+            text-align: center;
+        }
+        .measure3d-result.show { display: block; }
+        .measure3d-result .value { font-size: 20px; font-weight: 700; font-family: var(--fb-mono); color: var(--fb-success); }
+        .measure3d-result .unit { font-size: 12px; color: var(--fb-text-tertiary); }
+    </style>
+</head>
+<body>
+    <div class="app">
+        <!-- Sidebar -->
+        <button class="sidebar-collapse-btn" id="collapse-btn" onclick="toggleSidebar()" title="Toggle sidebar">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 3L5 7l4 4"/></svg>
+        </button>
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <a href="/" class="logo-row" style="text-decoration:none;color:inherit;">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1055 251" height="22">
+                        <defs>
+                            <linearGradient id="gc" x1="134" y1="66" x2="68" y2="115" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#11998e"/><stop offset="1" stop-color="#38ef7d"/></linearGradient>
+                            <linearGradient id="gd" x1="175" y1="199" x2="101" y2="75" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#1e83ec"/><stop offset="1" stop-color="#00cdff"/></linearGradient>
+                            <linearGradient id="gg" x1="290" y1="61" x2="221" y2="168" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#ffc837"/><stop offset="1" stop-color="#ff6a08"/></linearGradient>
+                            <linearGradient id="gh" x1="285" y1="80" x2="346" y2="124" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#be1e2d"/><stop offset="1" stop-color="#ff4d4d"/></linearGradient>
+                        </defs>
+                        <path d="M105.8,84.4c-.35-.53-.64-1-.88-1.36-1.65-2.42-10.11-13.17-27.51-8.26l-.3.1-27,21.36S34.53,113,47.25,130.72s31.88,8.43,37.74,5.4,34.4-27,35.82-28.21l0,0Z" fill="url(#gc)"/>
+                        <path d="M248.55,157l-23.75,37s-8.83,14.66-24.88,14.66-25-17.93-25-17.93l-54.07-82.75.06,0s-11-17.07-15.07-23.46l-.57-.89s-.1-.17-.31-.47c-1.65-2.42-10.11-13.17-27.51-8.26l-.1,0c3.34-1.85,34.6-27.39,34.6-27.39s21.42-15.38,38.38,7c6.27,9.53,50.19,77.84,50.19,77.84L216.36,157S230.72,176.53,248.55,157Z" fill="url(#gd)"/>
+                        <path d="M296.2,82.86c2.84-4.44,6.62-6.29,9.89-8,8.6-3.56,17.62-.07,17.8,0h0L289.21,47.41s-21.41-15.38-38.37,7c-6.28,9.53-50.27,78-50.27,78L216.36,157h0v0l0,0c.86,1.13,14.86,18.88,32.14-.06l31.63-49.08,0,0S293.36,87.31,296.2,82.86Z" fill="url(#gg)"/>
+                        <path d="M353.76,130.72c-12.71,17.73-31.88,8.43-37.74,5.4s-34.64-27.22-35.84-28.22l0,0s13.22-20.55,16.06-25,6.62-6.29,9.89-8c8.6-3.56,17.61-.07,17.8,0h0l27,21.36S366.48,113,353.76,130.72Z" fill="url(#gh)"/>
+                        <path d="M478.91,129.81v34.82a25.23,25.23,0,0,0,.82,6.76c1.64,4.92,6.14,7.37,11.88,5.94,2.05-.41,2.46.21,2.66,2.25s.82,6.35,1.23,9.63c.2,1.23.2,1.43-.82,1.64-6.35.61-12.49,1.23-18.64-1s-11.88-9.43-13.72-17.62a54.51,54.51,0,0,1-1.23-14.13c0-19.67-.21-39.33,0-59a37.39,37.39,0,0,0-1.64-11.67C457,80,451.67,75.94,443.06,75.32a26.36,26.36,0,0,0-8,.62,17.67,17.67,0,0,0-14.74,16.59c-.21,2.66-.21,5.53-.21,8.19,0,1.64.41,1.85,1.84,1.85h13.11c1.64,0,2.05.61,2.05,2.25a64.76,64.76,0,0,0,0,8.81c0,1.64-.41,2.05-2.05,2.05h-12.7c-1.84-.21-2.25.41-2.25,2.25v56.33c0,1.84-.2,2.66-2.46,2.66H404.35c-1.84,0-2.25-.61-2.25-2.25.2-18.44,0-37.08,0-55.51,0-3.48,0-3.48-3.49-3.48h-8.8c-1,0-1.44-.21-1.44-1.44s-.2-6.76-.2-10c0-1.85.61-1.64,1.84-1.64h10.24c1.44.2,2.05-.21,2.05-1.85a42.8,42.8,0,0,1,.82-12.49C407,73.69,416.84,65.49,431,62.62a50.66,50.66,0,0,1,27,1.44c12.29,4.3,18.23,13.52,20.27,25.81a82.92,82.92,0,0,1,.62,16Z" fill="#eef1f6"/>
+                        <path d="M566.78,161.56c-12.08,9.83-25.6,11.06-39.94,7.78S509,159.1,507.17,147.63a65.22,65.22,0,0,1-.61-8.81c0-11.26,0-22.53-.2-33.79,0-1.85.61-2.26,2.45-2.26h13.32c1.84,0,2.25.62,2.25,2.46v27.45a52.62,52.62,0,0,0,1.23,11.26,14.35,14.35,0,0,0,12.29,11.47,39.77,39.77,0,0,0,14.75-.2c7.78-1.84,12.49-7.17,13.72-16a27.24,27.24,0,0,0,.62-5.73c0-9.63,0-19.26-.21-28.88,0-1.64.62-2.05,2.25-2.05H583c1.23,0,1.85.2,1.85,1.64,0,21.71.2,43.22-.21,64.72s-13.72,34.82-34.21,36.87c-10.85,1.23-21.5.21-31.33-5.12a33.85,33.85,0,0,1-15.16-15.16c-.82-1.43-.41-1.84,1-2.45l12.7-4.72c1-.4,1.64-.61,2.25.62,5.13,10.86,16,14.13,27,12.9s18.44-8.19,19.67-20.27A82.08,82.08,0,0,0,566.78,161.56Z" fill="#eef1f6"/>
+                        <path d="M613.28,117.31V81.67c-.21-1.84.2-2.45,2.05-2.25h13.72c1.84-.2,2.25.41,2.25,2-.2,6.35,0,12.7-.2,19.25,0,1.44.41,2,2,1.85h18.43c1.64,0,2,.41,2,1.84a64.51,64.51,0,0,0,0,9c0,1.44-.41,1.85-2,1.85H633.15c-1.64,0-2,.41-2,2,.2,11.27.2,22.74,0,34,0,4.71.82,9,5.32,11.47a14.71,14.71,0,0,0,14.55-.62c1.23-.61,2.25-2.66,3.68-2s1.64,2.26,2.46,3.49l3.69,5.73c.61.82.82,1.23-.21,2-10.44,8.19-26.83,8.81-37.48,1-7-4.91-9.83-11.88-9.83-20.27V117.31Z" fill="#eef1f6"/>
+                        <path d="M755.07,138.68c0,23-16.37,39.09-38.05,39.09-13.86,0-25.51-6.94-31.56-18.73v18.14h-7.08V67.75h7.38v50C692,106.24,703.45,99.6,717,99.6,738.7,99.6,755.07,115.53,755.07,138.68Zm-7.37,0c0-19.32-13.42-32.44-31.12-32.44s-31,13.12-31,32.44,13.27,32.45,31,32.45S747.7,158,747.7,138.68Z" fill="#eef1f6"/>
+                        <path d="M846.36,100.19v77h-7.23V159c-6,11.94-17.69,18.73-31.56,18.73-21.68,0-38.05-16.08-38.05-39.09S785.89,99.6,807.57,99.6c13.72,0,25.22,6.79,31.42,18.44V100.19ZM839,138.68c0-19.32-13.28-32.44-31-32.44s-31,13.12-31,32.44,13.28,32.45,31,32.45S839,158,839,138.68Z" fill="#eef1f6"/>
+                        <path d="M866.12,167.88l3.39-5.9c5.9,5,16.37,9.3,27.73,9.3,16.22,0,22.71-5.76,22.71-14.46,0-22.41-51-5.9-51-36.13,0-11.65,9.74-21.09,29.2-21.09,9.74,0,20.35,3,26.4,7.52l-3.39,5.9c-6.49-4.72-14.9-6.93-23.16-6.93-15,0-21.68,6.19-21.68,14.45,0,23.16,51,6.79,51,36.14,0,12.53-10.76,21.09-30.38,21.09C884.26,177.77,872.17,173.49,866.12,167.88Z" fill="#eef1f6"/>
+                        <path d="M1004.16,160.36l4.28,4.87c-6.79,8.26-17.26,12.54-29.06,12.54-23.3,0-39.82-16.23-39.82-39.09S955.2,99.6,977,99.6c20.5,0,35.1,15.34,36.14,35.84l-65,12.68c3.68,14.16,15.63,23,31.41,23C989.41,171.13,998.26,167.59,1004.16,160.36Zm-57.37-22.27c0,1.48.15,3.1.29,4.58l58.7-11.51c-2.06-13.71-13-25.07-28.76-25.07C959.33,106.09,946.79,119.36,946.79,138.09Z" fill="#eef1f6"/>
+                    </svg>
+                    <span class="app-badge">Mapper</span>
+                </a>
+                <a href="/" class="nav-label" style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--fb-text-tertiary);text-decoration:none;margin-top:10px;transition:color 0.2s;">
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 10L4 6l4-4"/></svg>
+                    All Sites
+                </a>
+            </div>
+
+            <div class="sidebar-section">
+                <div class="sidebar-section-title">Views</div>
+                <div class="nav-item active" data-view="ortho" onclick="switchView('ortho')">
+                    <span class="icon"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="14" height="14" rx="2"/><line x1="2" y1="9" x2="16" y2="9"/><line x1="9" y1="2" x2="9" y2="16"/></svg></span>
+                    <span class="nav-label">Orthomosaic</span>
+                    <span class="badge">2D</span>
+                </div>
+                <div class="nav-item" data-view="model" onclick="switchView('model')">
+                    <span class="icon"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 2L16 6v6l-7 4-7-4V6l7-4z"/><path d="M9 12V18M9 12L2 6M9 12l7-6"/></svg></span>
+                    <span class="nav-label">3D Model</span>
+                    <span class="badge">3D</span>
+                </div>
+                <div class="nav-item" data-view="dsm" onclick="switchView('dsm')">
+                    <span class="icon"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 14l4-6 3 4 3-8 4 10"/><rect x="2" y="2" width="14" height="14" rx="2"/></svg></span>
+                    <span class="nav-label">Elevation</span>
+                </div>
+                <div class="nav-item" data-view="dtm" onclick="switchView('dtm')">
+                    <span class="icon"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 12c3-2 5 2 7 0s3-4 7-2"/><path d="M2 8c3-2 5 2 7 0s3-4 7-2"/><rect x="2" y="2" width="14" height="14" rx="2"/></svg></span>
+                    <span class="nav-label">Terrain</span>
+                </div>
+            </div>
+
+            <div class="sidebar-section">
+                <div class="sidebar-section-title">Analysis</div>
+                <div class="nav-item" data-view="compare" onclick="switchView('compare')">
+                    <span class="icon"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="14" height="14" rx="2"/><line x1="9" y1="2" x2="9" y2="16"/><path d="M6 9L4 7M6 9L4 11" opacity="0.5"/><path d="M12 9l2-2M12 9l2 2" opacity="0.5"/></svg></span>
+                    <span class="nav-label">Compare</span>
+                </div>
+                <div class="nav-item" data-view="annotations" onclick="switchView('annotations')">
+                    <span class="icon"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 2C5.7 2 3 4.5 3 7.5c0 4.5 6 8.5 6 8.5s6-4 6-8.5C15 4.5 12.3 2 9 2z"/><circle cx="9" cy="7.5" r="2"/></svg></span>
+                    <span class="nav-label">Annotations</span>
+                </div>
+            </div>
+
+            <div class="sidebar-section">
+                <div class="sidebar-section-title">Media</div>
+                <div class="nav-item" data-view="gallery" onclick="switchView('gallery')">
+                    <span class="icon"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="14" height="14" rx="2"/><circle cx="7" cy="7" r="2"/><path d="M16 12l-4-4-6 6"/></svg></span>
+                    <span class="nav-label">Gallery</span>
+                    <span class="badge">72</span>
+                </div>
+            </div>
+
+            <div class="sidebar-section">
+                <div class="sidebar-section-title">Data Layers</div>
+                <div class="nav-item" data-view="pointcloud" onclick="switchView('pointcloud')">
+                    <span class="icon"><svg viewBox="0 0 18 18" fill="currentColor"><circle cx="5" cy="5" r="1.5"/><circle cx="13" cy="5" r="1.5"/><circle cx="9" cy="9" r="1.5"/><circle cx="5" cy="13" r="1.5"/><circle cx="13" cy="13" r="1.5"/><circle cx="3" cy="9" r="1"/><circle cx="15" cy="9" r="1"/></svg></span>
+                    <span class="nav-label">Point Cloud</span>
+                    <span class="badge">83MB</span>
+                </div>
+            </div>
+
+            <div class="sidebar-footer">
+                <div class="site-info">
+                    <div class="site-info-label">Current Site</div>
+                    <div class="site-info-name">Pune Survey Site</div>
+                    <div class="site-info-meta">72 images &middot; DJI Mavic 3D</div>
+                    <div class="site-info-coords">18.5620&deg;N, 73.6994&deg;E</div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <div class="main">
+            <div class="topbar">
+                <div class="topbar-left">
+                    <span class="topbar-title" id="view-title">Orthomosaic</span>
+                    <span class="topbar-subtitle" id="view-subtitle">14,843 &times; 10,787 px &middot; 2 cm/px</span>
+                </div>
+                <div class="topbar-right">
+                    <button class="btn" onclick="downloadCurrent()" id="btn-download">
+                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2v9M4 7l4 4 4-4M2 13h12"/></svg>
+                        Export
+                    </button>
+                    <button class="btn" onclick="takeScreenshot()" id="btn-screenshot">
+                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="4" width="12" height="9" rx="1.5"/><circle cx="8" cy="9" r="2.5"/><path d="M5.5 4V3a.5.5 0 01.5-.5h4a.5.5 0 01.5.5v1"/></svg>
+                        Screenshot
+                    </button>
+                    <div class="divider-v"></div>
+                    <button class="btn btn-primary" onclick="generateReport()">
+                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 2h8l2 3v9a1 1 0 01-1 1H3a1 1 0 01-1-1V5l2-3z"/><path d="M5 9h6M5 12h3"/></svg>
+                        Generate Report
+                    </button>
+                </div>
+            </div>
+
+            <!-- Orthomosaic View -->
+            <div class="view-panel active" id="ortho-view">
+                <div class="loader" id="ortho-loader">
+                    <div class="spinner"></div>
+                    <p>Loading orthomosaic...</p>
+                </div>
+                <div id="ortho-container"></div>
+                <!-- Measurement toolbar (M5) -->
+                <!-- Measurement & Tools toolbar -->
+                <div class="measure-toolbar" id="measure-toolbar">
+                    <button class="btn btn-icon" onclick="startMeasure('distance')" id="btn-measure-dist" title="Measure distance">
+                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 13L13 3"/><circle cx="3" cy="13" r="1.5"/><circle cx="13" cy="3" r="1.5"/></svg>
+                    </button>
+                    <button class="btn btn-icon" onclick="startMeasure('area')" id="btn-measure-area" title="Measure area">
+                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 3h10v10H3z" stroke-dasharray="2 2"/></svg>
+                    </button>
+                    <button class="btn btn-icon" onclick="startMeasure('volume')" id="btn-measure-vol" title="Volume estimation">
+                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 10l6 3 6-3M2 7l6 3 6-3M2 4l6 3 6-3 -6-3z"/></svg>
+                    </button>
+                    <div style="width:1px;height:18px;background:var(--fb-border);margin:0 2px;"></div>
+                    <button class="btn btn-icon" onclick="exportAnnotationsGeoJSON()" id="btn-export-ann" title="Export annotations as GeoJSON">
+                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2v9M4 7l4 4 4-4M2 13h12"/></svg>
+                    </button>
+                    <button class="btn btn-icon" onclick="clearMeasure()" id="btn-measure-clear" title="Clear measurements">
+                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+                    </button>
+                </div>
+                <!-- Coordinate readout -->
+                <div id="coord-readout" style="position:absolute;bottom:16px;left:16px;background:rgba(8,13,22,0.9);backdrop-filter:blur(12px);border:1px solid var(--fb-border);border-radius:var(--fb-radius);padding:5px 10px;font-size:10px;font-family:var(--fb-mono);color:var(--fb-text-secondary);z-index:40;display:none;">
+                    <span id="coord-lat">—</span>, <span id="coord-lng">—</span>
+                </div>
+                <div class="zoom-indicator" id="zoom-indicator">
+                    Zoom: <span>100%</span>
+                    <button class="btn" onclick="fitOrtho()" style="margin-left:8px;padding:3px 8px;font-size:11px;">Fit</button>
+                </div>
+            </div>
+
+            <!-- 3D Model View -->
+            <div class="view-panel" id="model-view">
+                <div class="loader" id="model-loader">
+                    <div class="spinner"></div>
+                    <p>Loading 3D model...</p>
+                </div>
+                <div id="model-container"></div>
+                <div class="float-toolbar" id="model-toolbar">
+                    <button class="btn btn-icon active" onclick="toggleMeshView('mesh')" id="btn-mesh" title="Mesh">
+                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 1l7 4v6l-7 4-7-4V5z"/></svg>
+                    </button>
+                    <button class="btn btn-icon" onclick="toggleMeshView('wireframe')" id="btn-wire" title="Wireframe">
+                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M8 1l7 4v6l-7 4-7-4V5z"/><path d="M8 9v6M1 5l7 4 7-4"/></svg>
+                    </button>
+                    <button class="btn btn-icon" onclick="resetCam()" title="Reset Camera">
+                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 8a6 6 0 1111.5-2.5"/><path d="M13 2v4h-4"/></svg>
+                    </button>
+                    <button class="btn btn-icon" onclick="topDownCam()" title="Top-Down">
+                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><circle cx="8" cy="8" r="1"/></svg>
+                    </button>
+                    <div style="width:100%;height:1px;background:var(--fb-border);"></div>
+                    <button class="btn btn-icon" onclick="toggle3DMeasure()" id="btn-measure3d" title="Measure 3D distance">
+                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 13L13 3"/><circle cx="3" cy="13" r="1.5"/><circle cx="13" cy="3" r="1.5"/></svg>
+                    </button>
+                    <button class="btn btn-icon" onclick="clear3DMeasure()" title="Clear 3D measurements">
+                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+                    </button>
+                </div>
+                <div class="measure3d-result" id="measure3d-result">
+                    <div class="value" id="measure3d-value">--</div>
+                    <div class="unit">3D distance (approx)</div>
+                </div>
+                <div class="stats-panel" id="model-stats">
+                    <div class="stat-item">
+                        <span class="stat-value primary" id="stat-verts">—</span>
+                        <span class="stat-label">Vertices</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-value accent" id="stat-faces">—</span>
+                        <span class="stat-label">Faces</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-value" id="stat-fps">60</span>
+                        <span class="stat-label">FPS</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- DSM View -->
+            <div class="view-panel" id="dsm-view">
+                <div id="dsm-map-container" style="flex:1;"></div>
+                <!-- DSM Legend -->
+                <div class="elevation-legend" id="dsm-legend">
+                    <div class="legend-title">Elevation (DSM)</div>
+                    <div class="legend-bar" style="background:linear-gradient(90deg, #1a237e, #0d47a1, #01579b, #006064, #1b5e20, #33691e, #827717, #f57f17, #e65100, #b71c1c);"></div>
+                    <div class="legend-labels">
+                        <span>Low</span>
+                        <span>Mid</span>
+                        <span>High</span>
+                    </div>
+                    <div class="legend-desc">Includes buildings, trees, and all surface features</div>
+                </div>
+            </div>
+
+            <!-- DTM View -->
+            <div class="view-panel" id="dtm-view">
+                <div id="dtm-map-container" style="flex:1;"></div>
+                <!-- DTM Legend -->
+                <div class="elevation-legend" id="dtm-legend">
+                    <div class="legend-title">Terrain (DTM)</div>
+                    <div class="legend-bar" style="background:linear-gradient(90deg, #263238, #37474f, #455a64, #607d8b, #78909c, #90a4ae, #b0bec5, #cfd8dc, #eceff1, #ffffff);"></div>
+                    <div class="legend-labels">
+                        <span>Valley</span>
+                        <span>Flat</span>
+                        <span>Ridge</span>
+                    </div>
+                    <div class="legend-desc">Bare earth elevation — vegetation and structures removed</div>
+                </div>
+            </div>
+
+            <!-- Point Cloud View -->
+            <div class="view-panel" id="pointcloud-view">
+                <div class="loader" id="pc-loader">
+                    <div class="spinner"></div>
+                    <p>Loading point cloud...</p>
+                </div>
+                <div id="pc-container" style="flex:1;position:relative;"></div>
+                <div class="stats-panel" style="bottom:16px;right:16px;left:auto;" id="pc-stats">
+                    <div class="stat-item">
+                        <span class="stat-value primary" id="pc-points">—</span>
+                        <span class="stat-label">Points</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-value accent" id="pc-size">83 MB</span>
+                        <span class="stat-label">File Size (LAZ)</span>
+                    </div>
+                </div>
+                <div class="float-toolbar" id="pc-toolbar">
+                    <button class="btn btn-icon" onclick="resetPcCam()" title="Reset Camera">
+                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 8a6 6 0 1111.5-2.5"/><path d="M13 2v4h-4"/></svg>
+                    </button>
+                    <button class="btn btn-icon" onclick="topDownPcCam()" title="Top-Down">
+                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><circle cx="8" cy="8" r="1"/></svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Gallery View -->
+            <div class="view-panel" id="gallery-view" style="flex-direction:column;overflow:hidden;">
+                <div class="gallery-topbar">
+                    <div style="display:flex;align-items:center;gap:12px;">
+                        <span class="gallery-count" id="gallery-count">72 images</span>
+                        <button class="btn" onclick="showToast('Drop images here or use Import from FlytBase')" style="font-size:11px;padding:4px 10px;">
+                            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="width:12px;height:12px"><path d="M8 2v9M4 7l4-4 4 4M2 13h12"/></svg>
+                            Add Images
+                        </button>
+                    </div>
+                    <div style="display:flex;gap:6px;">
+                        <button class="btn btn-icon" id="btn-folders" onclick="setGalleryMode('folders')" title="Group by flight">
+                            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4v9a1 1 0 001 1h10a1 1 0 001-1V6a1 1 0 00-1-1H8L6.5 3H3a1 1 0 00-1 1z"/></svg>
+                        </button>
+                        <button class="btn btn-icon active" id="btn-grid" onclick="setGalleryMode('grid')" title="Grid view">
+                            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>
+                        </button>
+                        <button class="btn btn-icon" id="btn-list" onclick="setGalleryMode('list')" title="List view">
+                            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="1" y1="3" x2="15" y2="3"/><line x1="1" y1="8" x2="15" y2="8"/><line x1="1" y1="13" x2="15" y2="13"/></svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="gallery-grid" id="gallery-grid"></div>
+            </div>
+
+            <!-- Annotations View (M3) -->
+            <div class="view-panel" id="annotations-view" style="flex-direction:column;">
+                <div id="annotations-map-container" style="flex:1;"></div>
+                <div class="measure-toolbar" style="bottom:16px;">
+                    <button class="btn" onclick="addAnnotation('note')" id="btn-ann-note">
+                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="width:12px;height:12px"><path d="M2 2h12v10H6l-4 2v-2z"/></svg>
+                        Note
+                    </button>
+                    <button class="btn" onclick="addAnnotation('issue')" id="btn-ann-issue" style="border-color:rgba(248,113,113,0.3);">
+                        <svg viewBox="0 0 16 16" fill="none" stroke="#f87171" stroke-width="1.5" style="width:12px;height:12px"><path d="M8 1l7 13H1z"/><path d="M8 6v3M8 11v1"/></svg>
+                        Issue
+                    </button>
+                    <button class="btn" onclick="addAnnotation('marker')" id="btn-ann-marker">
+                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="width:12px;height:12px"><path d="M8 1C5.2 1 3 3.2 3 6c0 4 5 9 5 9s5-5 5-9c0-2.8-2.2-5-5-5z"/></svg>
+                        Marker
+                    </button>
+                </div>
+            </div>
+
+            <!-- Compare View (M3) -->
+            <div class="view-panel" id="compare-view" style="flex-direction:column;">
+                <div class="compare-container" id="compare-container">
+                    <div class="compare-layer left">
+                        <img id="compare-left-img" src="" alt="Before" />
+                    </div>
+                    <div class="compare-layer right" id="compare-right-layer">
+                        <img id="compare-right-img" src="" alt="After" />
+                    </div>
+                    <!-- Change detection overlay -->
+                    <div class="compare-layer" id="change-overlay" style="display:none;mix-blend-mode:screen;opacity:0.7;">
+                        <img id="change-img" src="" alt="Changes" />
+                    </div>
+                    <div class="compare-slider" id="compare-slider"></div>
+                    <div class="compare-label left">
+                        <div>Before</div>
+                        <div class="date" id="compare-date-left">—</div>
+                    </div>
+                    <div class="compare-label right">
+                        <div>After</div>
+                        <div class="date" id="compare-date-right">—</div>
+                    </div>
+                    <div class="compare-hint">Drag the slider to compare &middot; Toggle heatmap for change detection</div>
+                    <!-- Timeline bar -->
+                    <div class="timeline-bar">
+                        <span class="timeline-label">Jan 2026</span>
+                        <div class="timeline-track" id="timeline-track">
+                            <div class="timeline-dot selected" style="left:15%;" title="Jan 15, 2026" data-date="2026-01-15" data-img="/assets/orthomosaic_earlier.jpg"></div>
+                            <div class="timeline-dot active" style="left:55%;" title="Mar 2, 2026" data-date="2026-03-02" data-img="/assets/odm_orthophoto.jpg"></div>
+                        </div>
+                        <span class="timeline-label">Mar 2026</span>
+                        <div class="timeline-mode-btns">
+                            <button class="btn btn-icon" onclick="toggleChangeHeatmap()" id="btn-heatmap" title="Change detection heatmap">
+                                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 4v4l3 2"/></svg>
+                            </button>
+                            <button class="btn btn-icon" onclick="toggleTimelapse()" id="btn-timelapse" title="Timelapse animation">
+                                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="5,3 13,8 5,13"/></svg>
+                            </button>
+                            <button class="btn btn-icon" onclick="showChangeAnalysis()" id="btn-ai-change" title="AI change analysis">
+                                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.5 3.5l1.4 1.4M11.1 11.1l1.4 1.4M3.5 12.5l1.4-1.4M11.1 4.9l1.4-1.4"/><circle cx="8" cy="8" r="3"/></svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div><!-- end .main -->
+
+        <!-- Right Sidebar Toggle Button -->
+        <button class="right-sidebar-collapse-btn" id="right-collapse-btn" onclick="toggleRightSidebar()" title="Toggle info panel">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 3L9 7l-4 4"/></svg>
+        </button>
+
+        <!-- Right Sidebar -->
+        <aside class="right-sidebar" id="right-sidebar">
+            <div class="rp-section">
+                <div class="rp-section-title">Site Info</div>
+                <div class="rp-row">
+                    <span class="rp-label">Site</span>
+                    <span class="rp-value">Pune Survey Site</span>
+                </div>
+                <div class="rp-row">
+                    <span class="rp-label">Location</span>
+                    <span class="rp-value" style="font-size:11px;">18.5620&deg;N 73.6994&deg;E</span>
+                </div>
+            </div>
+            <div class="rp-section">
+                <div class="rp-section-title">Flight Data</div>
+                <div class="rp-row">
+                    <span class="rp-label">Images</span>
+                    <span class="rp-value accent">72</span>
+                </div>
+                <div class="rp-row">
+                    <span class="rp-label">Drone</span>
+                    <span class="rp-value">DJI Mavic 3D</span>
+                </div>
+                <div class="rp-row">
+                    <span class="rp-label">Altitude</span>
+                    <span class="rp-value success">609 m</span>
+                </div>
+                <div class="rp-row">
+                    <span class="rp-label">Date</span>
+                    <span class="rp-value">Mar 2, 2026</span>
+                </div>
+            </div>
+            <div class="rp-section">
+                <div class="rp-section-title">Map Data</div>
+                <div class="rp-row">
+                    <span class="rp-label">Resolution</span>
+                    <span class="rp-value primary">14,843 &times; 10,787</span>
+                </div>
+                <div class="rp-row">
+                    <span class="rp-label">GSD</span>
+                    <span class="rp-value">~2 cm/px</span>
+                </div>
+                <div class="rp-row">
+                    <span class="rp-label">Coverage</span>
+                    <span class="rp-value">3.5 hectares</span>
+                </div>
+            </div>
+            <div class="rp-section">
+                <div class="rp-section-title">Measurements</div>
+                <div id="rp-measurements">
+                    <div class="rp-measurement-empty">Use tools to measure</div>
+                </div>
+            </div>
+        </aside>
+    </div><!-- end .app -->
+
+    <!-- Lightbox -->
+    <div class="lightbox" id="lightbox" onclick="if(event.target===this)closeLightbox()">
+        <button class="lightbox-nav prev" onclick="event.stopPropagation();navLightbox(-1)">&lsaquo;</button>
+        <img id="lightbox-img" src="" alt="" />
+        <div class="lightbox-info" id="lightbox-info"></div>
+        <button class="lightbox-nav next" onclick="event.stopPropagation();navLightbox(1)">&rsaquo;</button>
+    </div>
+
+    <!-- Export Modal -->
+    <div class="modal-overlay" id="export-modal" onclick="if(event.target===this)closeExportModal()">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Export Data</h3>
+                <button class="modal-close" onclick="closeExportModal()">&times;</button>
+            </div>
+            <div class="modal-body" id="export-list">
+                <div style="text-align:center;padding:20px;color:var(--fb-text-tertiary);">
+                    <div class="spinner" style="margin:0 auto 12px;"></div>
+                    Loading available formats...
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <!-- Scripts -->
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+        }
+    }
+    </script>
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+        import { MTLLoader } from 'three/addons/loaders/MTLLoader.js';
+        import { PLYLoader } from 'three/addons/loaders/PLYLoader.js';
+
+        // ── State ──
+        let currentView = 'ortho';
+        let orthoMap = null;
+        let threeScene = null, threeCamera = null, threeRenderer = null, threeControls = null;
+        let loadedModel = null, wireframeGroup = null;
+        let modelCenter = new THREE.Vector3(), modelRadius = 50;
+        // Point cloud state
+        let pcScene = null, pcCamera = null, pcRenderer = null, pcControls = null;
+        let pcCenter = new THREE.Vector3(), pcRadius = 50;
+
+        // ── View Switching ──
+        window.switchView = function(view) {
+            currentView = view;
+            document.querySelectorAll('.view-panel').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+
+            document.getElementById(view + '-view').classList.add('active');
+            document.querySelector(`[data-view="${view}"]`).classList.add('active');
+
+            const titles = {
+                ortho: ['Orthomosaic', '14,843 \u00d7 10,787 px \u00b7 2 cm/px'],
+                model: ['3D Textured Model', '191K vertices \u00b7 300K faces \u00b7 28 texture maps'],
+                dsm: ['Digital Surface Model', 'Colored hillshade elevation'],
+                dtm: ['Digital Terrain Model', 'Bare earth elevation'],
+                pointcloud: ['Point Cloud', '18M+ points \u00b7 LAZ compressed'],
+                gallery: ['Image Gallery', '72 source images \u00b7 DJI Mavic 3D \u00b7 March 2, 2026'],
+                compare: ['Compare Surveys', 'Side-by-side comparison \u00b7 Drag slider to reveal'],
+                annotations: ['Annotations', 'Click on the map to add notes, issues, and markers'],
+            };
+            document.getElementById('view-title').textContent = titles[view]?.[0] || view;
+            document.getElementById('view-subtitle').textContent = titles[view]?.[1] || '';
+
+            if (view === 'ortho' && !orthoMap) initOrtho();
+            if (view === 'model' && !threeScene) initThreeJS();
+            if (view === 'pointcloud' && !pcScene) initPointCloud();
+            if (view === 'gallery') loadGallery();
+            if (view === 'dsm') setTimeout(() => initDsmMap(), 50);
+            if (view === 'dtm') setTimeout(() => initDtmMap(), 50);
+            if (view === 'dsm' && dsmMap) setTimeout(() => dsmMap.invalidateSize(), 100);
+            if (view === 'dtm' && dtmMap) setTimeout(() => dtmMap.invalidateSize(), 100);
+            if (view === 'compare') initCompare();
+            if (view === 'annotations') setTimeout(() => initAnnotations(), 50);
+            if (view === 'ortho' && orthoMap) setTimeout(() => orthoMap.invalidateSize(), 50);
+            if (view === 'model' && threeRenderer) onResize3D();
+            if (view === 'pointcloud' && pcRenderer) onResizePC();
+        };
+
+        // ── Orthomosaic (Leaflet) ──
+        function initOrtho() {
+            const container = document.getElementById('ortho-container');
+            // Scale image coords to ~1000 range so Leaflet zoom levels work naturally
+            const imgW = 14843, imgH = 10787;
+            const scale = 1000 / Math.max(imgW, imgH);
+            const w = imgW * scale, h = imgH * scale;
+
+            orthoMap = L.map(container, {
+                crs: L.CRS.Simple,
+                minZoom: -4,
+                maxZoom: 6,
+                zoomControl: true,
+                attributionControl: false,
+                // Smooth continuous zoom — no stepping
+                scrollWheelZoom: false,
+                smoothWheelZoom: true,
+                smoothSensitivity: 1.5,
+                zoomSnap: 0,
+                zoomAnimation: true,
+                zoomAnimationThreshold: 4,
+                // Pinch zoom
+                touchZoom: true,
+                bounceAtZoomLimits: false,
+            });
+
+            const bounds = [[0, 0], [h, w]];
+            window._orthoBounds = bounds;
+            const imgOverlay = L.imageOverlay('/assets/odm_orthophoto.jpg?' + Date.now(), bounds);
+            imgOverlay.addTo(orthoMap);
+            orthoMap.fitBounds(bounds, { padding: [30, 30] });
+
+            imgOverlay.on('load', () => {
+                document.getElementById('ortho-loader').classList.add('hidden');
+            });
+
+            orthoMap.on('zoomend', () => {
+                const zoom = orthoMap.getZoom();
+                const pct = Math.round(Math.pow(2, zoom) * 100);
+                document.querySelector('#zoom-indicator span').textContent = pct + '%';
+            });
+
+            setTimeout(() => orthoMap.fire('zoomend'), 100);
+
+            // Setup measurement click handlers and coordinate readout
+            setupMeasureHandler();
+            setupCoordReadout();
+        }
+
+        // ── 3D Model (Three.js + OBJ/MTL with textures) ──
+        function initThreeJS() {
+            const container = document.getElementById('model-container');
+            threeScene = new THREE.Scene();
+            threeScene.background = new THREE.Color(0x080d16);
+
+            threeCamera = new THREE.PerspectiveCamera(55, container.clientWidth / container.clientHeight, 0.01, 50000);
+            threeRenderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+            threeRenderer.setSize(container.clientWidth, container.clientHeight);
+            threeRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            threeRenderer.toneMapping = THREE.ACESFilmicToneMapping;
+            threeRenderer.toneMappingExposure = 1.4;
+            container.appendChild(threeRenderer.domElement);
+
+            // Controls — improved zoom and pan
+            threeControls = new OrbitControls(threeCamera, threeRenderer.domElement);
+            threeControls.enableDamping = true;
+            threeControls.dampingFactor = 0.08;
+            threeControls.screenSpacePanning = true;
+            threeControls.minDistance = 1;
+            threeControls.maxDistance = 5000;
+            threeControls.zoomSpeed = 1.5;
+            threeControls.panSpeed = 1.2;
+            threeControls.rotateSpeed = 0.8;
+            threeControls.maxPolarAngle = Math.PI;
+            // Smooth zoom with mouse wheel
+            threeControls.enableZoom = true;
+
+            // Lighting — brighter for textured model
+            const ambient = new THREE.AmbientLight(0xffffff, 1.0);
+            threeScene.add(ambient);
+            const dir1 = new THREE.DirectionalLight(0xffffff, 0.6);
+            dir1.position.set(100, 200, 100);
+            threeScene.add(dir1);
+            const dir2 = new THREE.DirectionalLight(0xaaccff, 0.3);
+            dir2.position.set(-100, 100, -100);
+            threeScene.add(dir2);
+            const hemi = new THREE.HemisphereLight(0xffffff, 0x444466, 0.4);
+            threeScene.add(hemi);
+
+            // Load textured OBJ model from ODM
+            const mtlLoader = new MTLLoader();
+            mtlLoader.setPath('/assets/');
+            mtlLoader.load('odm_textured_model_geo.mtl', (materials) => {
+                materials.preload();
+
+                const objLoader = new OBJLoader();
+                objLoader.setMaterials(materials);
+                objLoader.setPath('/assets/');
+                objLoader.load('odm_textured_model_geo.obj', (obj) => {
+                    loadedModel = obj;
+
+                    // Compute bounding box for camera positioning
+                    const box = new THREE.Box3().setFromObject(obj);
+                    modelCenter = box.getCenter(new THREE.Vector3());
+                    modelRadius = box.getSize(new THREE.Vector3()).length() / 2;
+
+                    // Update controls distance limits based on model size
+                    threeControls.minDistance = modelRadius * 0.05;
+                    threeControls.maxDistance = modelRadius * 10;
+
+                    threeScene.add(obj);
+
+                    // Build wireframe group
+                    wireframeGroup = new THREE.Group();
+                    obj.traverse((child) => {
+                        if (child.isMesh) {
+                            const wire = new THREE.LineSegments(
+                                new THREE.WireframeGeometry(child.geometry),
+                                new THREE.LineBasicMaterial({ color: 0x2C7BF2, transparent: true, opacity: 0.2 })
+                            );
+                            wire.position.copy(child.position);
+                            wire.rotation.copy(child.rotation);
+                            wire.scale.copy(child.scale);
+                            wireframeGroup.add(wire);
+                        }
+                    });
+                    wireframeGroup.visible = false;
+                    threeScene.add(wireframeGroup);
+
+                    // Count geometry
+                    let totalVerts = 0, totalFaces = 0;
+                    obj.traverse((child) => {
+                        if (child.isMesh && child.geometry) {
+                            totalVerts += child.geometry.attributes.position?.count || 0;
+                            totalFaces += child.geometry.index ? child.geometry.index.count / 3 : 0;
+                        }
+                    });
+                    document.getElementById('stat-verts').textContent = totalVerts.toLocaleString();
+                    document.getElementById('stat-faces').textContent = totalFaces.toLocaleString();
+
+                    window.resetCam();
+                    document.getElementById('model-loader').classList.add('hidden');
+                    setup3DMeasureHandler();
+                },
+                (xhr) => {
+                    if (xhr.total) {
+                        const pct = Math.round(xhr.loaded / xhr.total * 100);
+                        const loaderP = document.querySelector('#model-loader p');
+                        if (loaderP) loaderP.textContent = `Loading 3D model... ${pct}%`;
+                    }
+                });
+            });
+
+            // Animate
+            let fc = 0, lt = performance.now();
+            function animate() {
+                requestAnimationFrame(animate);
+                threeControls.update();
+                threeRenderer.render(threeScene, threeCamera);
+                fc++;
+                const now = performance.now();
+                if (now - lt >= 1000) {
+                    document.getElementById('stat-fps').textContent = fc;
+                    fc = 0; lt = now;
+                }
+            }
+            animate();
+
+            window.addEventListener('resize', onResize3D);
+        }
+
+        function onResize3D() {
+            if (!threeRenderer) return;
+            const c = document.getElementById('model-container');
+            threeCamera.aspect = c.clientWidth / c.clientHeight;
+            threeCamera.updateProjectionMatrix();
+            threeRenderer.setSize(c.clientWidth, c.clientHeight);
+        }
+
+        window.resetCam = function() {
+            if (!threeCamera) return;
+            threeCamera.position.set(
+                modelCenter.x + modelRadius * 0.8,
+                modelCenter.y + modelRadius * 0.6,
+                modelCenter.z + modelRadius * 0.8
+            );
+            threeControls.target.copy(modelCenter);
+            threeControls.update();
+        };
+
+        window.topDownCam = function() {
+            if (!threeCamera) return;
+            threeCamera.position.set(modelCenter.x, modelCenter.y + modelRadius * 1.5, modelCenter.z + 0.01);
+            threeControls.target.copy(modelCenter);
+            threeControls.update();
+        };
+
+        window.toggleMeshView = function(mode) {
+            document.querySelectorAll('#model-toolbar .btn').forEach(b => b.classList.remove('active'));
+            if (mode === 'mesh') {
+                if (loadedModel) loadedModel.visible = true;
+                if (wireframeGroup) wireframeGroup.visible = false;
+                document.getElementById('btn-mesh').classList.add('active');
+            } else {
+                if (loadedModel) loadedModel.visible = false;
+                if (wireframeGroup) wireframeGroup.visible = true;
+                document.getElementById('btn-wire').classList.add('active');
+            }
+        };
+
+        // ── Export Modal ──
+        window.downloadCurrent = function() {
+            document.getElementById('export-modal').style.display = 'flex';
+            // Fetch available formats
+            fetch('/api/export/default/formats')
+                .then(r => r.json())
+                .then(formats => {
+                    const list = document.getElementById('export-list');
+                    list.innerHTML = '';
+                    const labels = {
+                        orthomosaic: { icon: '🗺️', name: 'Orthomosaic' },
+                        mesh: { icon: '🧊', name: '3D Mesh' },
+                        dsm: { icon: '📐', name: 'Digital Surface Model' },
+                        dtm: { icon: '🏔️', name: 'Digital Terrain Model' },
+                        pointcloud: { icon: '☁️', name: 'Point Cloud' },
+                    };
+                    for (const [asset, fmts] of Object.entries(formats)) {
+                        const label = labels[asset] || { icon: '📄', name: asset };
+                        for (const [fmt, info] of Object.entries(fmts)) {
+                            const row = document.createElement('div');
+                            row.className = 'export-row';
+                            row.innerHTML = `
+                                <span class="export-icon">${label.icon}</span>
+                                <div class="export-info">
+                                    <div class="export-name">${label.name}</div>
+                                    <div class="export-meta">${fmt.toUpperCase()} · ${info.size_mb} MB</div>
+                                </div>
+                                <a class="btn btn-primary" href="${info.url}" download style="text-decoration:none;">
+                                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2v9M4 7l4 4 4-4M2 13h12"/></svg>
+                                    Download
+                                </a>
+                            `;
+                            list.appendChild(row);
+                        }
+                    }
+                })
+                .catch(() => {
+                    document.getElementById('export-list').innerHTML = '<p style="color:var(--fb-text-tertiary)">Could not load export formats.</p>';
+                });
+        };
+
+        window.closeExportModal = function() {
+            document.getElementById('export-modal').style.display = 'none';
+        };
+
+        window.takeScreenshot = function() {
+            if (currentView === 'model' && threeRenderer) {
+                threeRenderer.render(threeScene, threeCamera);
+                const a = document.createElement('a');
+                a.download = 'flytbase-3d-capture.png';
+                a.href = threeRenderer.domElement.toDataURL('image/png');
+                a.click();
+                showToast('Screenshot saved');
+            } else if (currentView === 'ortho') {
+                // For Leaflet, use the canvas if available
+                showToast('Use Export to download the full orthomosaic');
+            }
+        };
+
+        window.showToast = function(msg) {
+            const t = document.getElementById('toast');
+            t.textContent = msg;
+            t.classList.add('show');
+            setTimeout(() => t.classList.remove('show'), 2500);
+        };
+
+        // ── Point Cloud Viewer ──
+        function initPointCloud() {
+            const container = document.getElementById('pc-container');
+            pcScene = new THREE.Scene();
+            pcScene.background = new THREE.Color(0x080d16);
+
+            pcCamera = new THREE.PerspectiveCamera(55, container.clientWidth / container.clientHeight, 0.01, 50000);
+            pcRenderer = new THREE.WebGLRenderer({ antialias: true });
+            pcRenderer.setSize(container.clientWidth, container.clientHeight);
+            pcRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            container.appendChild(pcRenderer.domElement);
+
+            pcControls = new OrbitControls(pcCamera, pcRenderer.domElement);
+            pcControls.enableDamping = true;
+            pcControls.dampingFactor = 0.08;
+            pcControls.screenSpacePanning = true;
+            pcControls.zoomSpeed = 1.5;
+
+            pcScene.add(new THREE.AmbientLight(0xffffff, 0.5));
+
+            const loader = new PLYLoader();
+            loader.load('/assets/point_cloud.ply', (geometry) => {
+                geometry.computeBoundingSphere();
+                pcCenter.copy(geometry.boundingSphere.center);
+                pcRadius = geometry.boundingSphere.radius;
+
+                const hasColors = !!geometry.attributes.color;
+                const mat = new THREE.PointsMaterial({
+                    size: pcRadius * 0.003,
+                    vertexColors: hasColors,
+                    color: hasColors ? 0xffffff : 0x2C7BF2,
+                    sizeAttenuation: true,
+                });
+                const points = new THREE.Points(geometry, mat);
+                pcScene.add(points);
+
+                pcControls.minDistance = pcRadius * 0.05;
+                pcControls.maxDistance = pcRadius * 10;
+
+                document.getElementById('pc-points').textContent = geometry.attributes.position.count.toLocaleString();
+                window.resetPcCam();
+                document.getElementById('pc-loader').classList.add('hidden');
+            });
+
+            function animatePC() {
+                requestAnimationFrame(animatePC);
+                pcControls.update();
+                pcRenderer.render(pcScene, pcCamera);
+            }
+            animatePC();
+            window.addEventListener('resize', onResizePC);
+        }
+
+        function onResizePC() {
+            if (!pcRenderer) return;
+            const c = document.getElementById('pc-container');
+            pcCamera.aspect = c.clientWidth / c.clientHeight;
+            pcCamera.updateProjectionMatrix();
+            pcRenderer.setSize(c.clientWidth, c.clientHeight);
+        }
+
+        window.resetPcCam = function() {
+            if (!pcCamera) return;
+            pcCamera.position.set(pcCenter.x + pcRadius * 0.8, pcCenter.y + pcRadius * 0.6, pcCenter.z + pcRadius * 0.8);
+            pcControls.target.copy(pcCenter);
+            pcControls.update();
+        };
+
+        window.topDownPcCam = function() {
+            if (!pcCamera) return;
+            pcCamera.position.set(pcCenter.x, pcCenter.y + pcRadius * 1.5, pcCenter.z + 0.01);
+            pcControls.target.copy(pcCenter);
+            pcControls.update();
+        };
+
+        // ── Compare View (M3) ──
+        let compareInited = false;
+        function initCompare() {
+            if (compareInited) return;
+            compareInited = true;
+
+            // Left = earlier survey, Right = latest survey
+            document.getElementById('compare-left-img').src = '/assets/orthomosaic_earlier.jpg?' + Date.now();
+            document.getElementById('compare-right-img').src = '/assets/odm_orthophoto.jpg?' + Date.now();
+            document.getElementById('compare-date-left').textContent = 'Survey 1 — Jan 15, 2026';
+            document.getElementById('compare-date-right').textContent = 'Survey 2 — Mar 2, 2026';
+
+            const container = document.getElementById('compare-container');
+            const slider = document.getElementById('compare-slider');
+            const rightLayer = document.getElementById('compare-right-layer');
+            let isDragging = false;
+
+            function updateSplit(x) {
+                const rect = container.getBoundingClientRect();
+                let pct = ((x - rect.left) / rect.width) * 100;
+                pct = Math.max(2, Math.min(98, pct));
+                container.style.setProperty('--split', pct + '%');
+            }
+
+            // Set initial position
+            container.style.setProperty('--split', '50%');
+
+            // Mouse events
+            slider.addEventListener('mousedown', (e) => { isDragging = true; e.preventDefault(); });
+            container.addEventListener('mousedown', (e) => {
+                isDragging = true;
+                updateSplit(e.clientX);
+            });
+            window.addEventListener('mousemove', (e) => {
+                if (!isDragging) return;
+                updateSplit(e.clientX);
+            });
+            window.addEventListener('mouseup', () => { isDragging = false; });
+
+            // Touch events
+            slider.addEventListener('touchstart', (e) => { isDragging = true; e.preventDefault(); });
+            container.addEventListener('touchstart', (e) => {
+                isDragging = true;
+                updateSplit(e.touches[0].clientX);
+            });
+            window.addEventListener('touchmove', (e) => {
+                if (!isDragging) return;
+                updateSplit(e.touches[0].clientX);
+            });
+            window.addEventListener('touchend', () => { isDragging = false; });
+        }
+
+        window.fitOrtho = function() {
+            if (orthoMap && window._orthoBounds) {
+                orthoMap.invalidateSize();
+                setTimeout(() => {
+                    orthoMap.fitBounds(window._orthoBounds, { padding: [30, 30], animate: true });
+                }, 50);
+            }
+        };
+
+        window.toggleSidebar = function() {
+            const sb = document.getElementById('sidebar');
+            const btn = document.getElementById('collapse-btn');
+            sb.classList.toggle('collapsed');
+            btn.classList.toggle('is-collapsed');
+            setTimeout(() => {
+                if (orthoMap) { orthoMap.invalidateSize(); fitOrtho(); }
+                if (threeRenderer) onResize3D();
+                if (pcRenderer) onResizePC();
+            }, 320);
+        };
+
+        // ── Gallery ──
+        const imageFiles = [
+            "DJI_20260302164728_0001_V_FB.jpeg","DJI_20260302164731_0003_V_FB.jpeg","DJI_20260302164736_0004_V_FB.jpeg",
+            "DJI_20260302164740_0005_V_FB.jpeg","DJI_20260302164742_0006_V_FB.jpeg","DJI_20260302164744_0007_V_FB.jpeg",
+            "DJI_20260302164746_0008_V_FB.jpeg","DJI_20260302165126_0001_V_FB.jpeg","DJI_20260302165130_0003_V_FB.jpeg",
+            "DJI_20260302165132_0004_V_FB.jpeg","DJI_20260302165133_0005_V_FB.jpeg","DJI_20260302165135_0006_V_FB.jpeg",
+            "DJI_20260302165136_0007_V_FB.jpeg","DJI_20260302165139_0008_V_FB.jpeg","DJI_20260302165143_0009_V_FB.jpeg",
+            "DJI_20260302165147_0010_V_FB.jpeg","DJI_20260302165155_0011_V_FB.jpeg","DJI_20260302165159_0012_V_FB.jpeg",
+            "DJI_20260302165201_0013_V_FB.jpeg","DJI_20260302165202_0014_V_FB.jpeg","DJI_20260302165203_0015_V_FB.jpeg",
+            "DJI_20260302165205_0016_V_FB.jpeg","DJI_20260302165207_0017_V_FB.jpeg","DJI_20260302165208_0018_V_FB.jpeg",
+            "DJI_20260302165209_0020_V_FB.jpeg","DJI_20260302165213_0021_V_FB.jpeg","DJI_20260302165217_0022_V_FB.jpeg",
+            "DJI_20260302165221_0023_V_FB.jpeg","DJI_20260302165225_0024_V_FB.jpeg","DJI_20260302165231_0025_V_FB.jpeg",
+            "DJI_20260302165238_0026_V_FB.jpeg","DJI_20260302165248_0027_V_FB.jpeg","DJI_20260302165255_0028_V_FB.jpeg",
+            "DJI_20260302165304_0029_V_FB.jpeg","DJI_20260302165318_0030_V_FB.jpeg","DJI_20260302165322_0033_V_FB.jpeg",
+            "DJI_20260302165737_0001_V_FB.jpeg","DJI_20260302165741_0002_V_FB.jpeg","DJI_20260302165743_0003_V_FB.jpeg",
+            "DJI_20260302165746_0003_V_FB.jpeg","DJI_20260302165748_0004_V_FB.jpeg","DJI_20260302165750_0005_V_FB.jpeg",
+            "DJI_20260302165752_0006_V_FB.jpeg","DJI_20260302165756_0007_V_FB.jpeg","DJI_20260302165759_0008_V_FB.jpeg",
+            "DJI_20260302165803_0001_V_FB.jpeg","DJI_20260302165807_0002_V_FB.jpeg","DJI_20260302165809_0003_V_FB.jpeg",
+            "DJI_20260302165811_0004_V_FB.jpeg","DJI_20260302165813_0005_V_FB.jpeg","DJI_20260302165815_0007_V_FB.jpeg",
+            "DJI_20260302165816_0009_V_FB.jpeg","DJI_20260302165818_0010_V_FB.jpeg","DJI_20260302165819_0011_V_FB.jpeg",
+            "DJI_20260302165820_0012_V_FB.jpeg","DJI_20260302165822_0013_V_FB.jpeg","DJI_20260302165823_0014_V_FB.jpeg",
+            "DJI_20260302165825_0015_V_FB.jpeg","DJI_20260302165827_0016_V_FB.jpeg","DJI_20260302165829_0017_V_FB.jpeg",
+            "DJI_20260302165831_0019_V_FB.jpeg","DJI_20260302165833_0020_V_FB.jpeg","DJI_20260302165836_0021_V_FB.jpeg",
+            "DJI_20260302165840_0022_V_FB.jpeg","DJI_20260302165843_0023_V_FB.jpeg","DJI_20260302165845_0024_V_FB.jpeg",
+            "DJI_20260302165847_0025_V_FB.jpeg","DJI_20260302165849_0022_V_FB.jpeg","DJI_20260302165852_0024_V_FB.jpeg",
+            "DJI_20260302165855_0025_V_FB.jpeg","DJI_20260302165858_0027_V_FB.jpeg","DJI_20260302165901_0028_V_FB.jpeg",
+            "DJI_20260302165905_0029_V_FB.jpeg","DJI_20260302165911_0031_V_FB.jpeg","DJI_20260302165915_0033_V_FB.jpeg",
+        ];
+        let galleryLoaded = false;
+        let lightboxIndex = 0;
+
+        function loadGallery() {
+            if (galleryLoaded) return;
+            galleryLoaded = true;
+            const grid = document.getElementById('gallery-grid');
+            grid.innerHTML = '';
+            document.getElementById('gallery-count').textContent = imageFiles.length + ' images';
+
+            imageFiles.forEach((name, i) => {
+                // Parse timestamp from filename: DJI_YYYYMMDDHHMMSS_NNNN_V_FB.jpeg
+                const ts = name.match(/DJI_(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/);
+                let timeStr = '';
+                if (ts) timeStr = `${ts[4]}:${ts[5]}:${ts[6]}`;
+                const num = name.match(/_(\d{4})_V/)?.[1] || '';
+
+                const card = document.createElement('div');
+                card.className = 'gallery-card';
+                card.onclick = () => openLightbox(i);
+                card.innerHTML = `
+                    <img src="/assets/gallery/${name}" loading="lazy" alt="${name}" />
+                    <div class="gallery-badge">#${num}</div>
+                    <div class="gallery-meta">
+                        <div class="gallery-name">${name}</div>
+                        <div class="gallery-info">${timeStr} · 5280×3956 · 609m</div>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        window.openLightbox = function(index) {
+            lightboxIndex = index;
+            const lb = document.getElementById('lightbox');
+            lb.classList.add('show');
+            updateLightbox();
+        };
+
+        window.closeLightbox = function() {
+            document.getElementById('lightbox').classList.remove('show');
+        };
+
+        window.navLightbox = function(dir) {
+            lightboxIndex = (lightboxIndex + dir + imageFiles.length) % imageFiles.length;
+            updateLightbox();
+        };
+
+        function updateLightbox() {
+            const name = imageFiles[lightboxIndex];
+            document.getElementById('lightbox-img').src = '/assets/gallery/' + name;
+            const ts = name.match(/DJI_(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/);
+            let info = `${lightboxIndex + 1} / ${imageFiles.length} · ${name}`;
+            if (ts) info += ` · ${ts[1]}-${ts[2]}-${ts[3]} ${ts[4]}:${ts[5]}:${ts[6]}`;
+            document.getElementById('lightbox-info').textContent = info;
+        }
+
+        window.setGalleryMode = function(mode) {
+            const grid = document.getElementById('gallery-grid');
+            document.getElementById('btn-grid').classList.toggle('active', mode === 'grid');
+            document.getElementById('btn-list').classList.toggle('active', mode === 'list');
+            document.getElementById('btn-folders').classList.toggle('active', mode === 'folders');
+
+            if (mode === 'folders') {
+                grid.innerHTML = '';
+                grid.style.gridTemplateColumns = '1fr';
+                grid.style.gap = '0';
+
+                const flights = {};
+                imageFiles.forEach((name, i) => {
+                    const ts = name.match(/DJI_(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/);
+                    if (!ts) return;
+                    const key = `${ts[4]}:${ts[5].charAt(0)}0`;
+                    if (!flights[key]) flights[key] = [];
+                    flights[key].push({ name, index: i, time: `${ts[4]}:${ts[5]}:${ts[6]}` });
+                });
+
+                let flightNum = 1;
+                for (const [timeGroup, images] of Object.entries(flights)) {
+                    const folder = document.createElement('div');
+                    folder.className = 'flight-folder';
+
+                    const header = document.createElement('div');
+                    header.className = 'flight-folder-header';
+                    header.onclick = () => folder.classList.toggle('collapsed');
+                    header.innerHTML = `
+                        <svg class="chevron" width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 3l4 4-4 4"/></svg>
+                        <svg viewBox="0 0 16 16" fill="none" stroke="var(--fb-primary)" stroke-width="1.5" style="width:16px;height:16px;flex-shrink:0"><path d="M2 4v9a1 1 0 001 1h10a1 1 0 001-1V6a1 1 0 00-1-1H8L6.5 3H3a1 1 0 00-1 1z"/></svg>
+                        <div style="flex:1">
+                            <div style="font-size:13px;font-weight:600;color:var(--fb-text)">Flight ${flightNum} — ${timeGroup}</div>
+                            <div style="font-size:11px;color:var(--fb-text-tertiary)">${images.length} images</div>
+                        </div>
+                    `;
+                    folder.appendChild(header);
+
+                    const innerGrid = document.createElement('div');
+                    innerGrid.className = 'flight-folder-grid';
+                    images.forEach(({ name, index, time }) => {
+                        const num = name.match(/_(\d{4})_V/)?.[1] || '';
+                        const card = document.createElement('div');
+                        card.className = 'gallery-card';
+                        card.onclick = (e) => { e.stopPropagation(); openLightbox(index); };
+                        card.innerHTML = `
+                            <img src="/assets/gallery/${name}" loading="lazy" alt="${name}" />
+                            <div class="gallery-badge">#${num}</div>
+                            <div class="gallery-meta">
+                                <div class="gallery-name" style="font-size:10px">${name.substring(4,19)}</div>
+                                <div class="gallery-info">${time}</div>
+                            </div>
+                        `;
+                        innerGrid.appendChild(card);
+                    });
+                    folder.appendChild(innerGrid);
+                    grid.appendChild(folder);
+                    flightNum++;
+                }
+            } else if (mode === 'list') {
+                grid.style.gridTemplateColumns = '1fr';
+                grid.style.gap = '8px';
+                galleryLoaded = false;
+                loadGallery();
+            } else {
+                grid.style.gridTemplateColumns = 'repeat(auto-fill, minmax(200px, 1fr))';
+                grid.style.gap = '8px';
+                galleryLoaded = false;
+                loadGallery();
+            }
+        };
+
+        // ── DSM / DTM Leaflet Maps ──
+        let dsmMap = null, dtmMap = null;
+
+        function initDsmMap() {
+            if (dsmMap) { dsmMap.invalidateSize(); return; }
+            const container = document.getElementById('dsm-map-container');
+            const imgW = 1400, imgH = 1017;
+            const scale = 800 / Math.max(imgW, imgH);
+            const w = imgW * scale, h = imgH * scale;
+
+            dsmMap = L.map(container, {
+                crs: L.CRS.Simple, minZoom: -2, maxZoom: 4,
+                zoomControl: true, attributionControl: false,
+                scrollWheelZoom: false, smoothWheelZoom: true, smoothSensitivity: 1.5,
+                zoomSnap: 0, zoomAnimation: true,
+            });
+
+            const bounds = [[0, 0], [h, w]];
+            L.imageOverlay('/assets/dsm_preview.jpg?' + Date.now(), bounds).addTo(dsmMap);
+            dsmMap.fitBounds(bounds, { padding: [20, 20] });
+        }
+
+        function initDtmMap() {
+            if (dtmMap) { dtmMap.invalidateSize(); return; }
+            const container = document.getElementById('dtm-map-container');
+            const imgW = 1400, imgH = 1017;
+            const scale = 800 / Math.max(imgW, imgH);
+            const w = imgW * scale, h = imgH * scale;
+
+            dtmMap = L.map(container, {
+                crs: L.CRS.Simple, minZoom: -2, maxZoom: 4,
+                zoomControl: true, attributionControl: false,
+                scrollWheelZoom: false, smoothWheelZoom: true, smoothSensitivity: 1.5,
+                zoomSnap: 0, zoomAnimation: true,
+            });
+
+            const bounds = [[0, 0], [h, w]];
+            L.imageOverlay('/assets/dtm_preview.jpg?' + Date.now(), bounds).addTo(dtmMap);
+            dtmMap.fitBounds(bounds, { padding: [20, 20] });
+        }
+
+        // ── Annotations Map (M3) ──
+        let annMap = null;
+        let annMode = null;
+        let annotations = [];
+
+        function initAnnotations() {
+            if (annMap) { annMap.invalidateSize(); return; }
+            const container = document.getElementById('annotations-map-container');
+            const imgW = 14843, imgH = 10787;
+            const scale = 1000 / Math.max(imgW, imgH);
+            const w = imgW * scale, h = imgH * scale;
+
+            annMap = L.map(container, {
+                crs: L.CRS.Simple,
+                minZoom: -4, maxZoom: 6,
+                zoomControl: true, attributionControl: false,
+                scrollWheelZoom: false, smoothWheelZoom: true, smoothSensitivity: 1.5,
+                zoomSnap: 0, zoomAnimation: true,
+            });
+
+            const bounds = [[0, 0], [h, w]];
+            L.imageOverlay('/assets/odm_orthophoto.jpg?' + Date.now(), bounds).addTo(annMap);
+            annMap.fitBounds(bounds, { padding: [30, 30] });
+
+            // Click to add annotation
+            annMap.on('click', function(e) {
+                if (!annMode) return;
+                const text = prompt(annMode === 'issue' ? 'Describe the issue:' : 'Add a note:');
+                if (!text) { annMode = null; return; }
+
+                const colors = { note: '#3b8df5', issue: '#f87171', marker: '#f59e0b' };
+                const icons = { note: 'N', issue: '!', marker: 'P' };
+
+                const marker = L.marker(e.latlng, {
+                    icon: L.divIcon({
+                        className: '',
+                        html: '<div class="annotation-marker" style="background:' + colors[annMode] + '">' + icons[annMode] + '</div>',
+                        iconSize: [28, 28],
+                        iconAnchor: [14, 14],
+                    })
+                }).addTo(annMap);
+
+                marker.bindPopup(
+                    '<div class="annotation-popup">' +
+                    '<div class="ann-type ' + annMode + '">' + annMode + '</div>' +
+                    '<div class="ann-text">' + text + '</div>' +
+                    '<div class="ann-date">' + new Date().toLocaleString() + '</div>' +
+                    '</div>',
+                    { className: '', closeButton: false, maxWidth: 280 }
+                );
+
+                annotations.push({ type: annMode, text, latlng: e.latlng, date: new Date().toISOString() });
+                annMode = null;
+                document.querySelectorAll('[id^=btn-ann]').forEach(b => b.classList.remove('active'));
+                annMap.getContainer().style.cursor = '';
+                showToast('Annotation added');
+            });
+        }
+
+        window.addAnnotation = function(type) {
+            annMode = type;
+            document.querySelectorAll('[id^=btn-ann]').forEach(b => b.classList.remove('active'));
+            document.getElementById('btn-ann-' + type).classList.add('active');
+            if (annMap) annMap.getContainer().style.cursor = 'crosshair';
+            showToast('Click on the map to place ' + type);
+        };
+
+        // ── Coordinate Readout Under Cursor ──
+        function setupCoordReadout() {
+            if (!orthoMap) return;
+            const readout = document.getElementById('coord-readout');
+            const latEl = document.getElementById('coord-lat');
+            const lngEl = document.getElementById('coord-lng');
+
+            // Map coords to approximate GPS (based on site location)
+            // Our coords: 0-1000 range mapped to actual GPS bounds
+            const GPS_BOUNDS = {
+                latMin: 18.561446, latMax: 18.562567,
+                lngMin: 73.698170, lngMax: 73.700628,
+            };
+            const imgScale = 1000 / 14843;
+            const coordW = 14843 * imgScale, coordH = 10787 * imgScale;
+
+            orthoMap.on('mousemove', function(e) {
+                readout.style.display = 'block';
+                var lat = GPS_BOUNDS.latMin + (e.latlng.lat / coordH) * (GPS_BOUNDS.latMax - GPS_BOUNDS.latMin);
+                var lng = GPS_BOUNDS.lngMin + (e.latlng.lng / coordW) * (GPS_BOUNDS.lngMax - GPS_BOUNDS.lngMin);
+                latEl.textContent = lat.toFixed(6) + '\u00B0N';
+                lngEl.textContent = lng.toFixed(6) + '\u00B0E';
+            });
+
+            orthoMap.on('mouseout', function() {
+                readout.style.display = 'none';
+            });
+        }
+
+        // ── Volume Measurement (M5) ──
+        // Uses the area polygon + calls the API
+        window.volumeFromLastArea = async function(polygon) {
+            try {
+                showToast('Calculating volume...');
+                const resp = await fetch('/api/projects/proj001/volume', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        polygon: polygon.map(p => [p.lat, p.lng]),
+                        base_elevation: 500,
+                    }),
+                });
+                const data = await resp.json();
+                showMeasurementInPanel(
+                    (data.volume_m3 || 0).toFixed(0) + ' m\u00B3',
+                    'volume \u00b7 area: ' + (data.area_m2 || 0).toFixed(0) + ' m\u00B2 \u00b7 avg elev: ' + (data.avg_elevation || 0).toFixed(1) + 'm'
+                );
+            } catch (e) {
+                showToast('Volume calculation failed');
+            }
+        };
+
+        // ── Export Annotations as GeoJSON ──
+        window.exportAnnotationsGeoJSON = function() {
+            const features = annotations.map(ann => ({
+                type: 'Feature',
+                geometry: {
+                    type: 'Point',
+                    coordinates: [ann.latlng.lng, ann.latlng.lat],
+                },
+                properties: {
+                    type: ann.type,
+                    text: ann.text,
+                    date: ann.date,
+                },
+            }));
+
+            const geojson = {
+                type: 'FeatureCollection',
+                features: features,
+                metadata: {
+                    project: 'Pune Survey Site',
+                    exported_at: new Date().toISOString(),
+                    count: features.length,
+                },
+            };
+
+            if (features.length === 0) {
+                showToast('No annotations to export. Add some in the Annotations view first.');
+                return;
+            }
+
+            const blob = new Blob([JSON.stringify(geojson, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'flytbase_annotations_' + new Date().toISOString().slice(0, 10) + '.geojson';
+            a.click();
+            URL.revokeObjectURL(url);
+            showToast('Exported ' + features.length + ' annotations as GeoJSON');
+        };
+
+        // ── Download PDF Report (M5) ──
+        window.generateReport = async function() {
+            showToast('Generating report...');
+            try {
+                const a = document.createElement('a');
+                a.href = '/api/projects/proj001/report';
+                a.download = 'FlytBase_Mapper_Report.html';
+                a.click();
+                showToast('Report downloaded');
+            } catch (e) {
+                showToast('Report generation failed');
+            }
+        };
+
+        // ── Timelapse Animation ──
+        let timelapseRunning = false;
+        let timelapseInterval = null;
+
+        window.toggleTimelapse = function() {
+            const btn = document.getElementById('btn-timelapse');
+            if (timelapseRunning) {
+                clearInterval(timelapseInterval);
+                timelapseRunning = false;
+                btn.classList.remove('active');
+                btn.innerHTML = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="5,3 13,8 5,13"/></svg>';
+                return;
+            }
+
+            timelapseRunning = true;
+            btn.classList.add('active');
+            btn.innerHTML = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="3" width="3" height="10"/><rect x="9" y="3" width="3" height="10"/></svg>';
+
+            const images = [
+                { src: '/assets/orthomosaic_earlier.jpg', label: 'Jan 15, 2026' },
+                { src: '/assets/odm_orthophoto.jpg', label: 'Mar 2, 2026' },
+            ];
+            let currentIdx = 0;
+            const leftImg = document.getElementById('compare-left-img');
+            const leftDate = document.getElementById('compare-date-left');
+
+            // Hide the slider and right layer during timelapse
+            document.getElementById('compare-slider').style.display = 'none';
+            document.getElementById('compare-right-layer').style.display = 'none';
+
+            function tick() {
+                leftImg.src = images[currentIdx].src;
+                leftDate.textContent = images[currentIdx].label;
+
+                // Animate timeline dots
+                document.querySelectorAll('.timeline-dot').forEach((dot, i) => {
+                    dot.style.transform = i === currentIdx ? 'translate(-50%,-50%) scale(1.4)' : 'translate(-50%,-50%) scale(1)';
+                    dot.style.boxShadow = i === currentIdx ? '0 0 16px rgba(59,141,245,0.5)' : 'none';
+                });
+
+                currentIdx = (currentIdx + 1) % images.length;
+            }
+
+            tick();
+            timelapseInterval = setInterval(tick, 2000);
+
+            // Stop timelapse handler
+            const stopHandler = () => {
+                if (timelapseRunning) {
+                    clearInterval(timelapseInterval);
+                    timelapseRunning = false;
+                    btn.classList.remove('active');
+                    btn.innerHTML = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="5,3 13,8 5,13"/></svg>';
+                    document.getElementById('compare-slider').style.display = '';
+                    document.getElementById('compare-right-layer').style.display = '';
+                    // Reset timeline dots
+                    document.querySelectorAll('.timeline-dot').forEach(dot => {
+                        dot.style.transform = '';
+                        dot.style.boxShadow = '';
+                    });
+                }
+            };
+
+            // Auto-stop when switching views
+            window._stopTimelapse = stopHandler;
+        };
+
+        // ── AI Change Analysis Display ──
+        window.showChangeAnalysis = async function() {
+            const btn = document.getElementById('btn-ai-change');
+            btn.classList.add('active');
+            showToast('Running AI change analysis...');
+
+            try {
+                // Trigger analysis
+                await fetch('/api/projects/proj001/change-detection', { method: 'POST' });
+
+                // Poll for results (quick since it runs fast)
+                await new Promise(r => setTimeout(r, 3000));
+
+                const result = await fetch('/api/projects/proj001/change-detection').then(r => r.json());
+
+                if (result.error) {
+                    showToast('Analysis: ' + result.error);
+                    btn.classList.remove('active');
+                    return;
+                }
+
+                // Show results in a modal-like overlay
+                const regions = result.change_regions || [];
+                const major = regions.filter(r => r.type === 'Major').length;
+                const moderate = regions.filter(r => r.type === 'Moderate').length;
+                const minor = regions.filter(r => r.type === 'Minor').length;
+
+                const html = `
+                    <div style="padding:4px 0;">
+                        <div style="font-size:20px;font-weight:700;font-family:var(--fb-mono);color:var(--fb-accent);margin-bottom:4px;">${(result.total_changed_area_pct || 0).toFixed(1)}%</div>
+                        <div style="font-size:11px;color:var(--fb-text-tertiary);margin-bottom:12px;">Total area changed</div>
+                        <div style="display:flex;gap:12px;margin-bottom:12px;">
+                            <div style="text-align:center;flex:1;padding:8px;background:rgba(248,113,113,0.1);border-radius:8px;">
+                                <div style="font-size:18px;font-weight:700;color:#f87171;font-family:var(--fb-mono);">${major}</div>
+                                <div style="font-size:10px;color:var(--fb-text-tertiary);">Major</div>
+                            </div>
+                            <div style="text-align:center;flex:1;padding:8px;background:rgba(245,158,11,0.1);border-radius:8px;">
+                                <div style="font-size:18px;font-weight:700;color:#f59e0b;font-family:var(--fb-mono);">${moderate}</div>
+                                <div style="font-size:10px;color:var(--fb-text-tertiary);">Moderate</div>
+                            </div>
+                            <div style="text-align:center;flex:1;padding:8px;background:rgba(59,141,245,0.1);border-radius:8px;">
+                                <div style="font-size:18px;font-weight:700;color:#3b8df5;font-family:var(--fb-mono);">${minor}</div>
+                                <div style="font-size:10px;color:var(--fb-text-tertiary);">Minor</div>
+                            </div>
+                        </div>
+                        <div style="font-size:12px;color:var(--fb-text-secondary);line-height:1.5;">${result.summary || 'Analysis complete.'}</div>
+                    </div>
+                `;
+
+                // Show in the right panel measurements section
+                const measSection = document.querySelector('.rp-measurement-list');
+                if (measSection) {
+                    measSection.innerHTML = html;
+                }
+
+                // Make sure right panel is open
+                const rp = document.getElementById('right-sidebar');
+                if (rp && rp.classList.contains('collapsed')) {
+                    toggleRightSidebar();
+                }
+
+                showToast('AI change analysis complete — ' + regions.length + ' regions detected');
+            } catch (e) {
+                showToast('Change analysis failed: ' + e.message);
+            }
+            btn.classList.remove('active');
+        };
+
+        // ── Change Detection Heatmap ──
+        let heatmapVisible = false;
+        window.toggleChangeHeatmap = function() {
+            heatmapVisible = !heatmapVisible;
+            const overlay = document.getElementById('change-overlay');
+            const btn = document.getElementById('btn-heatmap');
+            if (heatmapVisible) {
+                document.getElementById('change-img').src = '/assets/change_overlay.jpg?' + Date.now();
+                overlay.style.display = 'block';
+                btn.classList.add('active');
+            } else {
+                overlay.style.display = 'none';
+                btn.classList.remove('active');
+            }
+        };
+
+        // ── Timeline Dot Interaction ──
+        document.querySelectorAll('.timeline-dot').forEach(dot => {
+            dot.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const img = dot.dataset.img;
+                const date = dot.dataset.date;
+                // Toggle which dot is "selected" as the left image
+                const allDots = document.querySelectorAll('.timeline-dot');
+                const selectedDots = Array.from(allDots).filter(d => d.classList.contains('selected'));
+                if (selectedDots.length < 2 && !dot.classList.contains('selected')) {
+                    dot.classList.add('selected');
+                } else {
+                    allDots.forEach(d => d.classList.remove('selected'));
+                    dot.classList.add('selected');
+                }
+                // Update compare images based on selections
+                const selected = Array.from(document.querySelectorAll('.timeline-dot.selected'));
+                if (selected.length === 2) {
+                    document.getElementById('compare-left-img').src = selected[0].dataset.img;
+                    document.getElementById('compare-right-img').src = selected[1].dataset.img;
+                    document.getElementById('compare-date-left').textContent = selected[0].title;
+                    document.getElementById('compare-date-right').textContent = selected[1].title;
+                }
+            });
+        });
+
+        // ── Right Sidebar Toggle ──
+        window.toggleRightSidebar = function() {
+            const rs = document.getElementById('right-sidebar');
+            const btn = document.getElementById('right-collapse-btn');
+            rs.classList.toggle('collapsed');
+            btn.classList.toggle('is-collapsed');
+            setTimeout(() => {
+                if (orthoMap) { orthoMap.invalidateSize(); }
+                if (threeRenderer) onResize3D();
+                if (pcRenderer) onResizePC();
+            }, 320);
+        };
+
+        // Helper: show measurement in right panel
+        function showMeasurementInPanel(value, label) {
+            const container = document.getElementById('rp-measurements');
+            container.innerHTML = '<div class="rp-measurement-result"><div class="rp-meas-val">' + value + '</div><div class="rp-meas-label">' + label + '</div></div>';
+            // Ensure right sidebar is open
+            var rs = document.getElementById('right-sidebar');
+            if (rs.classList.contains('collapsed')) {
+                toggleRightSidebar();
+            }
+        }
+
+        function clearMeasurementPanel() {
+            document.getElementById('rp-measurements').innerHTML = '<div class="rp-measurement-empty">Use tools to measure</div>';
+        }
+
+        // ── Measurement Tools (M5) — Rewritten ──
+        let measureMode = null;
+        let measurePoints = [];
+        let measureLayers = [];
+        let areaCompleteBtn = null;
+        let areaRunningLine = null;
+        let areaPolygonPreview = null;
+        let distDraggableMarker = null;
+        let distLine = null;
+        let distTooltip = null;
+
+        // Coord-to-meters helper
+        function coordDist(p1, p2) {
+            var dx = p2.lng - p1.lng, dy = p2.lat - p1.lat;
+            var pixelDist = Math.sqrt(dx*dx + dy*dy);
+            return pixelDist / 1000 * 14843 * 0.02;
+        }
+
+        function formatDist(meters) {
+            return meters > 1000 ? (meters/1000).toFixed(2) + ' km' : meters.toFixed(1) + ' m';
+        }
+
+        function perimeterOf(pts) {
+            var total = 0;
+            for (var i = 0; i < pts.length; i++) {
+                var next = (i + 1) % pts.length;
+                total += coordDist(pts[i], pts[next]);
+            }
+            return total;
+        }
+
+        let volumeMode = false;
+
+        window.startMeasure = function(mode) {
+            clearMeasure();
+            if (mode === 'volume') {
+                // Volume = area polygon + API call
+                volumeMode = true;
+                measureMode = 'area';
+                document.getElementById('btn-measure-vol').classList.add('active');
+                if (orthoMap) {
+                    orthoMap.getContainer().style.cursor = 'crosshair';
+                    showToast('Click points to define volume region, then Complete');
+                }
+                return;
+            }
+            volumeMode = false;
+            measureMode = mode;
+            document.getElementById('btn-measure-dist').classList.toggle('active', mode === 'distance');
+            document.getElementById('btn-measure-area').classList.toggle('active', mode === 'area');
+            if (orthoMap) {
+                orthoMap.getContainer().style.cursor = 'crosshair';
+                var msg = mode === 'distance' ? 'Click two points to measure distance' : 'Click points to define area, then click Complete';
+                showToast(msg);
+            }
+        };
+
+        window.clearMeasure = function() {
+            measureMode = null;
+            measurePoints = [];
+            measureLayers.forEach(l => { if (l && orthoMap.hasLayer(l)) orthoMap.removeLayer(l); });
+            measureLayers = [];
+            if (areaCompleteBtn && areaCompleteBtn.parentNode) areaCompleteBtn.parentNode.removeChild(areaCompleteBtn);
+            areaCompleteBtn = null;
+            areaRunningLine = null;
+            areaPolygonPreview = null;
+            distDraggableMarker = null;
+            distLine = null;
+            distTooltip = null;
+            clearMeasurementPanel();
+            volumeMode = false;
+            document.getElementById('btn-measure-dist').classList.remove('active');
+            document.getElementById('btn-measure-area').classList.remove('active');
+            document.getElementById('btn-measure-vol').classList.remove('active');
+            if (orthoMap) orthoMap.getContainer().style.cursor = '';
+        };
+
+        function updateAreaPolygon() {
+            // Remove old polygon preview
+            if (areaPolygonPreview && orthoMap.hasLayer(areaPolygonPreview)) {
+                orthoMap.removeLayer(areaPolygonPreview);
+            }
+            if (measurePoints.length >= 2) {
+                areaPolygonPreview = L.polygon(measurePoints, {
+                    color: '#34d399', weight: 2, fillColor: '#34d399', fillOpacity: 0.15, dashArray: '6 4'
+                }).addTo(orthoMap);
+                measureLayers.push(areaPolygonPreview);
+            }
+        }
+
+        function completeAreaMeasure() {
+            if (measurePoints.length < 3) return;
+            // Calculate area (Shoelace)
+            var area = 0;
+            var pts = measurePoints;
+            for (var i = 0; i < pts.length; i++) {
+                var j = (i + 1) % pts.length;
+                area += pts[i].lng * pts[j].lat;
+                area -= pts[j].lng * pts[i].lat;
+            }
+            area = Math.abs(area) / 2;
+            var scaleFactor = 14843 * 0.02 / 1000;
+            var sqMeters = area * scaleFactor * scaleFactor;
+            var display = sqMeters > 10000 ? (sqMeters/10000).toFixed(2) + ' ha' : sqMeters.toFixed(0) + ' m\u00B2';
+            var perimeter = perimeterOf(pts);
+
+            if (volumeMode) {
+                showMeasurementInPanel('Calculating...', 'volume estimation');
+                volumeFromLastArea(pts);
+                volumeMode = false;
+                document.getElementById('btn-measure-vol').classList.remove('active');
+            } else {
+                showMeasurementInPanel(display, 'area (approx) \u00b7 perimeter: ' + formatDist(perimeter));
+            }
+
+            if (areaCompleteBtn && areaCompleteBtn.parentNode) areaCompleteBtn.parentNode.removeChild(areaCompleteBtn);
+            areaCompleteBtn = null;
+
+            measurePoints = [];
+            orthoMap.getContainer().style.cursor = '';
+            measureMode = null;
+            document.getElementById('btn-measure-area').classList.remove('active');
+        }
+
+        // Measurement click handler
+        function setupMeasureHandler() {
+            if (!orthoMap) return;
+
+            // Disable default dblclick zoom so area measurement isn't interfered with
+            orthoMap.doubleClickZoom.disable();
+
+            orthoMap.on('click', function(e) {
+                if (!measureMode) return;
+
+                measurePoints.push(e.latlng);
+
+                if (measureMode === 'distance') {
+                    if (measurePoints.length === 1) {
+                        // First point — static circle
+                        var m1 = L.circleMarker(e.latlng, {
+                            radius: 6, fillColor: '#34d399', fillOpacity: 1,
+                            color: 'white', weight: 2
+                        }).addTo(orthoMap);
+                        measureLayers.push(m1);
+                    }
+                    if (measurePoints.length === 2) {
+                        // Second point — draggable marker
+                        var dragIcon = L.divIcon({
+                            className: '',
+                            html: '<div style="width:14px;height:14px;border-radius:50%;background:#34d399;border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.4);cursor:grab;"></div>',
+                            iconSize: [14, 14],
+                            iconAnchor: [7, 7],
+                        });
+                        distDraggableMarker = L.marker(e.latlng, { draggable: true, icon: dragIcon }).addTo(orthoMap);
+                        measureLayers.push(distDraggableMarker);
+
+                        // Draw line
+                        distLine = L.polyline(measurePoints, {
+                            color: '#34d399', weight: 2, dashArray: '6 4'
+                        }).addTo(orthoMap);
+                        measureLayers.push(distLine);
+
+                        // Calculate and show
+                        var realMeters = coordDist(measurePoints[0], measurePoints[1]);
+                        var display = formatDist(realMeters);
+
+                        // Tooltip on line
+                        distLine.bindTooltip(display, {
+                            permanent: true, direction: 'center',
+                            className: 'measure-running-label',
+                        }).openTooltip();
+
+                        showMeasurementInPanel(display, 'distance (approx)');
+
+                        // Drag handler — update in real time
+                        distDraggableMarker.on('drag', function(ev) {
+                            var newLatLng = ev.target.getLatLng();
+                            distLine.setLatLngs([measurePoints[0], newLatLng]);
+                            var newDist = coordDist(measurePoints[0], newLatLng);
+                            var newDisplay = formatDist(newDist);
+                            distLine.setTooltipContent(newDisplay);
+                            showMeasurementInPanel(newDisplay, 'distance (approx)');
+                        });
+
+                        orthoMap.getContainer().style.cursor = '';
+                        measureMode = null;
+                        document.getElementById('btn-measure-dist').classList.remove('active');
+                    }
+                }
+
+                if (measureMode === 'area') {
+                    // Draw draggable point marker
+                    var ptIndex = measurePoints.length - 1;
+                    var greenIcon = L.divIcon({
+                        className: '',
+                        html: '<div style="width:12px;height:12px;background:#34d399;border:2px solid white;border-radius:50%;cursor:grab;box-shadow:0 1px 4px rgba(0,0,0,0.3);"></div>',
+                        iconSize: [12, 12],
+                        iconAnchor: [6, 6],
+                    });
+                    var marker = L.marker(e.latlng, { icon: greenIcon, draggable: true }).addTo(orthoMap);
+                    marker._ptIndex = ptIndex;
+                    measureLayers.push(marker);
+
+                    // On drag, update the point position and redraw polygon
+                    marker.on('drag', function(ev) {
+                        var idx = this._ptIndex;
+                        measurePoints[idx] = this.getLatLng();
+                        updateAreaPolygon();
+                    });
+
+                    // Update polygon preview
+                    updateAreaPolygon();
+
+                    // Show running perimeter
+                    if (measurePoints.length >= 2) {
+                        var runPerimeter = 0;
+                        for (var rp = 0; rp < measurePoints.length - 1; rp++) {
+                            runPerimeter += coordDist(measurePoints[rp], measurePoints[rp+1]);
+                        }
+                        showMeasurementInPanel(formatDist(runPerimeter), 'running perimeter');
+                    }
+
+                    // After 3+ points, show Complete button
+                    if (measurePoints.length >= 3) {
+                        if (areaCompleteBtn && areaCompleteBtn.parentNode) areaCompleteBtn.parentNode.removeChild(areaCompleteBtn);
+                        var lastPt = orthoMap.latLngToContainerPoint(e.latlng);
+                        areaCompleteBtn = document.createElement('button');
+                        areaCompleteBtn.className = 'area-complete-btn';
+                        areaCompleteBtn.textContent = 'Complete';
+                        areaCompleteBtn.style.left = (lastPt.x + 20) + 'px';
+                        areaCompleteBtn.style.top = (lastPt.y - 10) + 'px';
+                        orthoMap.getContainer().appendChild(areaCompleteBtn);
+                        areaCompleteBtn.addEventListener('click', function(ev) {
+                            ev.stopPropagation();
+                            completeAreaMeasure();
+                        });
+                    }
+                }
+            });
+
+            // Right-click also completes area
+            orthoMap.on('contextmenu', function(e) {
+                if (measureMode === 'area' && measurePoints.length >= 3) {
+                    L.DomEvent.preventDefault(e);
+                    completeAreaMeasure();
+                }
+            });
+        }
+
+        // ── 3D Measurement Tools ──
+        let measure3DMode = false;
+        let measure3DPoints = [];
+        let measure3DObjects = []; // THREE objects to clean up
+        let measure3DRaycaster = new THREE.Raycaster();
+        let measure3DMouse = new THREE.Vector2();
+
+        window.toggle3DMeasure = function() {
+            measure3DMode = !measure3DMode;
+            document.getElementById('btn-measure3d').classList.toggle('active', measure3DMode);
+            if (measure3DMode) {
+                measure3DPoints = [];
+                document.getElementById('model-container').style.cursor = 'crosshair';
+                showToast('Click two points on the 3D model to measure distance');
+            } else {
+                document.getElementById('model-container').style.cursor = '';
+            }
+        };
+
+        window.clear3DMeasure = function() {
+            measure3DMode = false;
+            measure3DPoints = [];
+            document.getElementById('btn-measure3d').classList.remove('active');
+            document.getElementById('measure3d-result').classList.remove('show');
+            document.getElementById('model-container').style.cursor = '';
+            // Remove 3D measurement objects from scene
+            measure3DObjects.forEach(obj => {
+                if (obj.geometry) obj.geometry.dispose();
+                if (obj.material) obj.material.dispose();
+                threeScene.remove(obj);
+            });
+            measure3DObjects = [];
+            clearMeasurementPanel();
+        };
+
+        // 3D measure click handler — attached to model container
+        function setup3DMeasureHandler() {
+            const container = document.getElementById('model-container');
+            container.addEventListener('click', function(e) {
+                if (!measure3DMode || !threeScene || !loadedModel) return;
+
+                var rect = container.getBoundingClientRect();
+                measure3DMouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+                measure3DMouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+                measure3DRaycaster.setFromCamera(measure3DMouse, threeCamera);
+                var intersects = measure3DRaycaster.intersectObject(loadedModel, true);
+                if (intersects.length === 0) return;
+
+                var point = intersects[0].point.clone();
+                measure3DPoints.push(point);
+
+                // Add green sphere marker
+                var sphereGeo = new THREE.SphereGeometry(modelRadius * 0.008, 16, 16);
+                var sphereMat = new THREE.MeshBasicMaterial({ color: 0x34d399 });
+                var sphere = new THREE.Mesh(sphereGeo, sphereMat);
+                sphere.position.copy(point);
+                threeScene.add(sphere);
+                measure3DObjects.push(sphere);
+
+                if (measure3DPoints.length === 2) {
+                    // Draw line between points
+                    var lineGeo = new THREE.BufferGeometry().setFromPoints(measure3DPoints);
+                    var lineMat = new THREE.LineBasicMaterial({ color: 0x34d399, linewidth: 2 });
+                    var line3D = new THREE.Line(lineGeo, lineMat);
+                    threeScene.add(line3D);
+                    measure3DObjects.push(line3D);
+
+                    // Calculate 3D distance
+                    var dist3D = measure3DPoints[0].distanceTo(measure3DPoints[1]);
+                    // The model uses real-world coordinates, so dist is in model units
+                    // For ODM models, units are typically meters
+                    var display = dist3D > 1000 ? (dist3D/1000).toFixed(2) + ' km' : dist3D.toFixed(2) + ' m';
+
+                    document.getElementById('measure3d-value').textContent = display;
+                    document.getElementById('measure3d-result').classList.add('show');
+                    showMeasurementInPanel(display, '3D distance (approx)');
+
+                    measure3DMode = false;
+                    document.getElementById('btn-measure3d').classList.remove('active');
+                    container.style.cursor = '';
+                }
+            });
+        }
+
+        // ── PDF Report Generation (M5) ──
+        window.generateReport = async function() {
+            showToast('Generating report...');
+            try {
+                const site = await fetch('/api/sites/pune001').then(r => r.json());
+                const project = await fetch('/api/projects/proj001').then(r => r.json());
+                const outputs = await fetch('/api/projects/proj001/outputs').then(r => r.json());
+
+                const report = `
+FLYTBASE MAPPER — PROCESSING REPORT
+${'='.repeat(50)}
+
+SITE: ${site.name}
+Location: ${site.latitude}, ${site.longitude}
+Generated: ${new Date().toLocaleString()}
+
+PROJECT: ${project.name}
+Drone: ${project.drone_model || 'DJI Mavic 3D'}
+Images: ${project.image_count}
+Captured: ${project.captured_at || 'Mar 2, 2026'}
+Quality: ${project.quality}
+Processing Time: ${project.processing_time_s ? Math.round(project.processing_time_s/60) + ' minutes' : '~70 minutes'}
+GSD: ~2 cm/px
+
+OUTPUTS GENERATED:
+${outputs.map(o => '  - ' + o.type.toUpperCase() + ' (' + o.format + ') — ' + o.size_mb + ' MB').join('\n')}
+
+SUMMARY:
+• Orthomosaic: 14,843 x 10,787 px georeferenced map
+• 3D Model: 191K vertices, 300K faces, 28 texture maps
+• Point Cloud: 18M+ points (LAZ compressed)
+• DSM: Digital Surface Model with colored hillshade
+• DTM: Digital Terrain Model (bare earth)
+• Area Covered: ~3.5 hectares
+
+${'='.repeat(50)}
+Generated by FlytBase Mapper v2.0
+                `.trim();
+
+                // Download as text file
+                const blob = new Blob([report], { type: 'text/plain' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'FlytBase_Mapper_Report_' + new Date().toISOString().slice(0,10) + '.txt';
+                a.click();
+                URL.revokeObjectURL(url);
+                showToast('Report downloaded');
+            } catch (e) {
+                showToast('Report generation failed');
+            }
+        };
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') { closeExportModal(); closeLightbox(); }
+            if (document.getElementById('lightbox').classList.contains('show')) {
+                if (e.key === 'ArrowLeft') navLightbox(-1);
+                if (e.key === 'ArrowRight') navLightbox(1);
+            }
+        });
+
+        // Init default view
+        initOrtho();
+    </script>
+</body>
+</html>

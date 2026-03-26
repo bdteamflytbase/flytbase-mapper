@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+
+# Database
+mapper.db
+
+# Large output files (tracked via Git LFS or not at all)
+output/*.jpg
+output/*.png
+output/*.tif
+output/*.ply
+output/*.obj
+output/*.laz
+output/change_*.jpg
+output/change_*.png
+
+# ODM project outputs (too large for git)
+odm_project/
+
+# Source images (too large for git)
+images/
+data/
+
+# WebODM clone
+webodm/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# COLMAP workspace (reproducible)
+output/workspace/
+
+# Temp
+*.tmp
+*.log

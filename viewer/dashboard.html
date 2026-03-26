@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlytBase Mapper</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --fb-bg: #080d16;
+            --fb-surface: #111827;
+            --fb-surface-hover: #1a2332;
+            --fb-border: rgba(255,255,255,0.06);
+            --fb-border-active: rgba(44,123,242,0.4);
+            --fb-primary: #2C7BF2;
+            --fb-primary-hover: #0E61DD;
+            --fb-primary-subtle: rgba(44,123,242,0.08);
+            --fb-accent: #FFAB49;
+            --fb-text: #F0F0F0;
+            --fb-text-secondary: #8B95A5;
+            --fb-text-tertiary: #5A6577;
+            --fb-success: #38ef7d;
+            --fb-radius: 8px;
+            --fb-radius-lg: 12px;
+            --fb-font: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            --fb-mono: 'JetBrains Mono', monospace;
+            --fb-transition: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+            --fb-shadow: 0 1px 3px rgba(0,0,0,0.3), 0 4px 12px rgba(0,0,0,0.2);
+            --fb-shadow-lg: 0 4px 24px rgba(0,0,0,0.4);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: var(--fb-font); font-feature-settings: 'cv02','cv03','cv04','cv11'; background: var(--fb-bg); color: var(--fb-text); min-height: 100vh; -webkit-font-smoothing: antialiased; }
+
+        body::after { content:''; position:fixed; inset:0; pointer-events:none; z-index:9999; opacity:0.025; background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); background-size:200px; }
+        body::before { content:''; position:fixed; inset:0; pointer-events:none; z-index:-1; background-image:radial-gradient(circle,rgba(59,141,245,0.03) 1px,transparent 1px); background-size:28px 28px; }
+
+        /* ── Topbar ── */
+        .topbar { display: flex; align-items: center; justify-content: space-between; padding: 0 32px; height: 56px; border-bottom: 1px solid var(--fb-border); background: rgba(8,13,22,0.9); backdrop-filter: blur(16px); position: sticky; top: 0; z-index: 100; position: relative; }
+        .topbar::after { content:''; position:absolute; bottom:-1px; left:0; right:0; height:1px; background:linear-gradient(90deg,#11998e,#1e83ec,#3b8df5,#f59e0b); opacity:0.6; }
+        .topbar-left { display: flex; align-items: center; gap: 12px; }
+        .topbar-left svg { height: 22px; }
+        .app-badge { font-size: 10px; font-weight: 600; color: var(--fb-primary); background: var(--fb-primary-subtle); padding: 2px 7px; border-radius: 4px; letter-spacing: 0.5px; text-transform: uppercase; }
+
+        /* ── Page ── */
+        .page { max-width: 1200px; margin: 0 auto; padding: 32px; }
+        .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 28px; }
+        .page-title { font-size: 24px; font-weight: 700; }
+        .page-subtitle { font-size: 13px; color: var(--fb-text-tertiary); margin-top: 4px; }
+
+        /* ── Buttons ── */
+        .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: var(--fb-radius); font-size: 13px; font-weight: 500; font-family: var(--fb-font); cursor: pointer; transition: all var(--fb-transition); border: 1px solid var(--fb-border); background: var(--fb-surface); color: var(--fb-text-secondary); }
+        .btn:hover { background: var(--fb-surface-hover); color: var(--fb-text); }
+        .btn-primary { background: var(--fb-primary); color: white; border-color: var(--fb-primary); }
+        .btn-primary:hover { background: var(--fb-primary-hover); }
+        .btn svg { width: 15px; height: 15px; }
+
+        /* ── Stats Row ── */
+        .stats-row { display: flex; gap: 16px; margin-bottom: 28px; }
+        .stat-card { flex: 1; background: var(--fb-surface); border: 1px solid var(--fb-border); border-radius: var(--fb-radius-lg); padding: 16px 20px; }
+        .stat-card .value { font-size: 28px; font-weight: 700; line-height: 1; }
+        .stat-card .value.primary { color: var(--fb-primary); }
+        .stat-card .value.accent { color: var(--fb-accent); }
+        .stat-card .value.success { color: var(--fb-success); }
+        .stat-card .label { font-size: 12px; color: var(--fb-text-tertiary); margin-top: 6px; font-weight: 500; }
+
+        /* ── Site Grid ── */
+        .site-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; }
+
+        .site-card { background: var(--fb-surface); border: 1px solid var(--fb-border); border-radius: var(--fb-radius-lg); overflow: hidden; cursor: pointer; transition: all var(--fb-transition); }
+        .site-card:hover { border-color: var(--fb-primary); transform: translateY(-2px); box-shadow: var(--fb-shadow-lg); }
+
+        .site-card-thumb { width: 100%; height: 180px; object-fit: cover; background: var(--fb-bg); display: block; }
+        .site-card-thumb.placeholder { display: flex; align-items: center; justify-content: center; color: var(--fb-text-tertiary); font-size: 13px; }
+
+        .site-card-body { padding: 16px; }
+        .site-card-name { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+        .site-card-meta { font-size: 12px; color: var(--fb-text-secondary); margin-bottom: 10px; }
+        .site-card-tags { display: flex; gap: 4px; flex-wrap: wrap; }
+        .site-tag { font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 4px; background: var(--fb-primary-subtle); color: var(--fb-primary); text-transform: uppercase; letter-spacing: 0.3px; }
+
+        .site-card-footer { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; border-top: 1px solid var(--fb-border); }
+        .site-card-footer .stat { font-size: 11px; color: var(--fb-text-tertiary); }
+        .site-card-footer .stat b { color: var(--fb-text-secondary); }
+        .status-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; margin-right: 4px; }
+        .status-dot.active { background: var(--fb-success); }
+        .status-dot.processing { background: var(--fb-accent); animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+        /* ── New Site Card ── */
+        .new-site-card { border-style: dashed; border-color: var(--fb-text-tertiary); display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 280px; gap: 12px; }
+        .new-site-card:hover { border-color: var(--fb-primary); }
+        .new-site-card svg { width: 32px; height: 32px; color: var(--fb-text-tertiary); }
+        .new-site-card:hover svg { color: var(--fb-primary); }
+        .new-site-card p { font-size: 13px; color: var(--fb-text-tertiary); }
+        .new-site-card:hover p { color: var(--fb-primary); }
+
+        /* ── Modal ── */
+        .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); z-index: 500; align-items: center; justify-content: center; }
+        .modal-overlay.show { display: flex; }
+        .modal { background: var(--fb-surface); border: 1px solid var(--fb-border); border-radius: 16px; width: 520px; max-height: 85vh; overflow: hidden; box-shadow: var(--fb-shadow-lg); }
+        .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 20px 24px 16px; border-bottom: 1px solid var(--fb-border); }
+        .modal-header h3 { font-size: 16px; font-weight: 600; }
+        .modal-close { background: none; border: none; color: var(--fb-text-tertiary); cursor: pointer; padding: 4px 8px; border-radius: 4px; font-size: 18px; }
+        .modal-close:hover { color: var(--fb-text); background: var(--fb-surface-hover); }
+        .modal-body { padding: 20px 24px 24px; }
+
+        /* ── Form ── */
+        .form-group { margin-bottom: 16px; }
+        .form-label { display: block; font-size: 12px; font-weight: 600; color: var(--fb-text-secondary); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .form-input { width: 100%; padding: 10px 12px; background: var(--fb-bg); border: 1px solid var(--fb-border); border-radius: var(--fb-radius); color: var(--fb-text); font-size: 13px; font-family: var(--fb-font); outline: none; transition: border-color var(--fb-transition); }
+        .form-input:focus { border-color: var(--fb-primary); }
+        .form-input::placeholder { color: var(--fb-text-tertiary); }
+        .form-hint { font-size: 11px; color: var(--fb-text-tertiary); margin-top: 4px; }
+        .form-row { display: flex; gap: 12px; }
+        .form-row .form-group { flex: 1; }
+
+        select.form-input { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='%238B95A5' stroke-width='1.5'%3E%3Cpath d='M3 5l3 3 3-3'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 32px; }
+
+        /* ── Tabs ── */
+        .tabs { display: flex; gap: 0; border-bottom: 1px solid var(--fb-border); margin-bottom: 20px; }
+        .tab { padding: 10px 16px; font-size: 13px; font-weight: 500; color: var(--fb-text-tertiary); cursor: pointer; border-bottom: 2px solid transparent; transition: all var(--fb-transition); }
+        .tab:hover { color: var(--fb-text); }
+        .tab.active { color: var(--fb-primary); border-bottom-color: var(--fb-primary); }
+        .tab-panel { display: none; }
+        .tab-panel.active { display: block; }
+
+        /* ── Drop Zone ── */
+        .drop-zone { border: 2px dashed var(--fb-border); border-radius: var(--fb-radius-lg); padding: 40px; text-align: center; transition: all var(--fb-transition); cursor: pointer; }
+        .drop-zone:hover, .drop-zone.dragover { border-color: var(--fb-primary); background: var(--fb-primary-subtle); }
+        .drop-zone svg { width: 40px; height: 40px; color: var(--fb-text-tertiary); margin-bottom: 12px; }
+        .drop-zone p { font-size: 13px; color: var(--fb-text-secondary); }
+        .drop-zone .hint { font-size: 11px; color: var(--fb-text-tertiary); margin-top: 6px; }
+
+        /* ── Toast ── */
+        .toast { position: fixed; bottom: 24px; right: 24px; background: var(--fb-surface); border: 1px solid var(--fb-border); border-radius: var(--fb-radius); padding: 10px 16px; font-size: 13px; box-shadow: var(--fb-shadow-lg); z-index: 1000; transform: translateY(80px); opacity: 0; transition: all 0.3s; }
+        .toast.show { transform: translateY(0); opacity: 1; }
+
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--fb-surface-hover); border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <!-- Topbar -->
+    <div class="topbar">
+        <div class="topbar-left">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1055 251" height="22">
+                <defs><linearGradient id="gc" x1="134" y1="66" x2="68" y2="115" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#11998e"/><stop offset="1" stop-color="#38ef7d"/></linearGradient><linearGradient id="gd" x1="175" y1="199" x2="101" y2="75" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#1e83ec"/><stop offset="1" stop-color="#00cdff"/></linearGradient><linearGradient id="gg" x1="290" y1="61" x2="221" y2="168" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#ffc837"/><stop offset="1" stop-color="#ff6a08"/></linearGradient><linearGradient id="gh" x1="285" y1="80" x2="346" y2="124" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#be1e2d"/><stop offset="1" stop-color="#ff4d4d"/></linearGradient></defs>
+                <path d="M105.8,84.4c-.35-.53-.64-1-.88-1.36-1.65-2.42-10.11-13.17-27.51-8.26l-.3.1-27,21.36S34.53,113,47.25,130.72s31.88,8.43,37.74,5.4,34.4-27,35.82-28.21l0,0Z" fill="url(#gc)"/><path d="M248.55,157l-23.75,37s-8.83,14.66-24.88,14.66-25-17.93-25-17.93l-54.07-82.75.06,0s-11-17.07-15.07-23.46l-.57-.89s-.1-.17-.31-.47c-1.65-2.42-10.11-13.17-27.51-8.26l-.1,0c3.34-1.85,34.6-27.39,34.6-27.39s21.42-15.38,38.38,7c6.27,9.53,50.19,77.84,50.19,77.84L216.36,157S230.72,176.53,248.55,157Z" fill="url(#gd)"/><path d="M296.2,82.86c2.84-4.44,6.62-6.29,9.89-8,8.6-3.56,17.62-.07,17.8,0h0L289.21,47.41s-21.41-15.38-38.37,7c-6.28,9.53-50.27,78-50.27,78L216.36,157h0v0l0,0c.86,1.13,14.86,18.88,32.14-.06l31.63-49.08,0,0S293.36,87.31,296.2,82.86Z" fill="url(#gg)"/><path d="M353.76,130.72c-12.71,17.73-31.88,8.43-37.74,5.4s-34.64-27.22-35.84-28.22l0,0s13.22-20.55,16.06-25,6.62-6.29,9.89-8c8.6-3.56,17.61-.07,17.8,0h0l27,21.36S366.48,113,353.76,130.72Z" fill="url(#gh)"/>
+                <path d="M478.91,129.81v34.82a25.23,25.23,0,0,0,.82,6.76c1.64,4.92,6.14,7.37,11.88,5.94,2.05-.41,2.46.21,2.66,2.25s.82,6.35,1.23,9.63c.2,1.23.2,1.43-.82,1.64-6.35.61-12.49,1.23-18.64-1s-11.88-9.43-13.72-17.62a54.51,54.51,0,0,1-1.23-14.13c0-19.67-.21-39.33,0-59a37.39,37.39,0,0,0-1.64-11.67C457,80,451.67,75.94,443.06,75.32a26.36,26.36,0,0,0-8,.62,17.67,17.67,0,0,0-14.74,16.59c-.21,2.66-.21,5.53-.21,8.19,0,1.64.41,1.85,1.84,1.85h13.11c1.64,0,2.05.61,2.05,2.25a64.76,64.76,0,0,0,0,8.81c0,1.64-.41,2.05-2.05,2.05h-12.7c-1.84-.21-2.25.41-2.25,2.25v56.33c0,1.84-.2,2.66-2.46,2.66H404.35c-1.84,0-2.25-.61-2.25-2.25.2-18.44,0-37.08,0-55.51,0-3.48,0-3.48-3.49-3.48h-8.8c-1,0-1.44-.21-1.44-1.44s-.2-6.76-.2-10c0-1.85.61-1.64,1.84-1.64h10.24c1.44.2,2.05-.21,2.05-1.85a42.8,42.8,0,0,1,.82-12.49C407,73.69,416.84,65.49,431,62.62a50.66,50.66,0,0,1,27,1.44c12.29,4.3,18.23,13.52,20.27,25.81a82.92,82.92,0,0,1,.62,16Z" fill="#fafafa"/><path d="M566.78,161.56c-12.08,9.83-25.6,11.06-39.94,7.78S509,159.1,507.17,147.63a65.22,65.22,0,0,1-.61-8.81c0-11.26,0-22.53-.2-33.79,0-1.85.61-2.26,2.45-2.26h13.32c1.84,0,2.25.62,2.25,2.46v27.45a52.62,52.62,0,0,0,1.23,11.26,14.35,14.35,0,0,0,12.29,11.47,39.77,39.77,0,0,0,14.75-.2c7.78-1.84,12.49-7.17,13.72-16a27.24,27.24,0,0,0,.62-5.73c0-9.63,0-19.26-.21-28.88,0-1.64.62-2.05,2.25-2.05H583c1.23,0,1.85.2,1.85,1.64,0,21.71.2,43.22-.21,64.72s-13.72,34.82-34.21,36.87c-10.85,1.23-21.5.21-31.33-5.12a33.85,33.85,0,0,1-15.16-15.16c-.82-1.43-.41-1.84,1-2.45l12.7-4.72c1-.4,1.64-.61,2.25.62,5.13,10.86,16,14.13,27,12.9s18.44-8.19,19.67-20.27A82.08,82.08,0,0,0,566.78,161.56Z" fill="#fafafa"/><path d="M613.28,117.31V81.67c-.21-1.84.2-2.45,2.05-2.25h13.72c1.84-.2,2.25.41,2.25,2-.2,6.35,0,12.7-.2,19.25,0,1.44.41,2,2,1.85h18.43c1.64,0,2,.41,2,1.84a64.51,64.51,0,0,0,0,9c0,1.44-.41,1.85-2,1.85H633.15c-1.64,0-2,.41-2,2,.2,11.27.2,22.74,0,34,0,4.71.82,9,5.32,11.47a14.71,14.71,0,0,0,14.55-.62c1.23-.61,2.25-2.66,3.68-2s1.64,2.26,2.46,3.49l3.69,5.73c.61.82.82,1.23-.21,2-10.44,8.19-26.83,8.81-37.48,1-7-4.91-9.83-11.88-9.83-20.27V117.31Z" fill="#fafafa"/>
+                <path d="M755.07,138.68c0,23-16.37,39.09-38.05,39.09-13.86,0-25.51-6.94-31.56-18.73v18.14h-7.08V67.75h7.38v50C692,106.24,703.45,99.6,717,99.6,738.7,99.6,755.07,115.53,755.07,138.68Zm-7.37,0c0-19.32-13.42-32.44-31.12-32.44s-31,13.12-31,32.44,13.27,32.45,31,32.45S747.7,158,747.7,138.68Z" fill="#fafafa"/><path d="M846.36,100.19v77h-7.23V159c-6,11.94-17.69,18.73-31.56,18.73-21.68,0-38.05-16.08-38.05-39.09S785.89,99.6,807.57,99.6c13.72,0,25.22,6.79,31.42,18.44V100.19ZM839,138.68c0-19.32-13.28-32.44-31-32.44s-31,13.12-31,32.44,13.28,32.45,31,32.45S839,158,839,138.68Z" fill="#fafafa"/><path d="M866.12,167.88l3.39-5.9c5.9,5,16.37,9.3,27.73,9.3,16.22,0,22.71-5.76,22.71-14.46,0-22.41-51-5.9-51-36.13,0-11.65,9.74-21.09,29.2-21.09,9.74,0,20.35,3,26.4,7.52l-3.39,5.9c-6.49-4.72-14.9-6.93-23.16-6.93-15,0-21.68,6.19-21.68,14.45,0,23.16,51,6.79,51,36.14,0,12.53-10.76,21.09-30.38,21.09C884.26,177.77,872.17,173.49,866.12,167.88Z" fill="#fafafa"/><path d="M1004.16,160.36l4.28,4.87c-6.79,8.26-17.26,12.54-29.06,12.54-23.3,0-39.82-16.23-39.82-39.09S955.2,99.6,977,99.6c20.5,0,35.1,15.34,36.14,35.84l-65,12.68c3.68,14.16,15.63,23,31.41,23C989.41,171.13,998.26,167.59,1004.16,160.36Zm-57.37-22.27c0,1.48.15,3.1.29,4.58l58.7-11.51c-2.06-13.71-13-25.07-28.76-25.07C959.33,106.09,946.79,119.36,946.79,138.09Z" fill="#fafafa"/>
+            </svg>
+            <span class="app-badge">Mapper</span>
+        </div>
+        <div style="display:flex;gap:8px;">
+            <button class="btn" onclick="location.href='/api/docs'">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 2h8l2 3v9a1 1 0 01-1 1H3a1 1 0 01-1-1V5l2-3z"/><path d="M5 9h6M5 12h3"/></svg>
+                API Docs
+            </button>
+        </div>
+    </div>
+
+    <!-- Page -->
+    <div class="page">
+        <div class="page-header">
+            <div>
+                <div class="page-title">Sites</div>
+                <div class="page-subtitle">Manage your survey sites and drone mapping projects</div>
+            </div>
+            <button class="btn btn-primary" onclick="openNewSiteModal()">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3v10M3 8h10"/></svg>
+                New Site
+            </button>
+        </div>
+
+        <!-- Stats -->
+        <div class="stats-row" id="stats-row"></div>
+
+        <!-- Site Grid -->
+        <div class="site-grid" id="site-grid">
+            <div style="text-align:center;padding:60px;color:var(--fb-text-tertiary);">Loading...</div>
+        </div>
+    </div>
+
+    <!-- New Site Modal -->
+    <div class="modal-overlay" id="new-site-modal" onclick="if(event.target===this)closeModal('new-site-modal')">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>New Site</h3>
+                <button class="modal-close" onclick="closeModal('new-site-modal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Site Name</label>
+                    <input class="form-input" id="site-name" placeholder="e.g., Shell Deer Park Refinery" />
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Description</label>
+                    <input class="form-input" id="site-desc" placeholder="Brief description of the site" />
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Latitude</label>
+                        <input class="form-input" id="site-lat" type="number" step="0.0001" placeholder="18.5620" />
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Longitude</label>
+                        <input class="form-input" id="site-lon" type="number" step="0.0001" placeholder="73.6994" />
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Tags</label>
+                    <input class="form-input" id="site-tags" placeholder="survey, construction, solar (comma-separated)" />
+                </div>
+                <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:20px;">
+                    <button class="btn" onclick="closeModal('new-site-modal')">Cancel</button>
+                    <button class="btn btn-primary" onclick="createSite()">Create Site</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- New Project Modal -->
+    <div class="modal-overlay" id="new-project-modal" onclick="if(event.target===this)closeModal('new-project-modal')">
+        <div class="modal" style="width:560px;">
+            <div class="modal-header">
+                <h3>New Project</h3>
+                <button class="modal-close" onclick="closeModal('new-project-modal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="tabs">
+                    <div class="tab active" onclick="switchTab('upload')">Upload Images</div>
+                    <div class="tab" onclick="switchTab('flytbase')">Import from FlytBase</div>
+                </div>
+
+                <!-- Upload Tab -->
+                <div class="tab-panel active" id="tab-upload">
+                    <div class="form-group">
+                        <label class="form-label">Project Name</label>
+                        <input class="form-input" id="proj-name" placeholder="e.g., March 2026 Survey" />
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Quality</label>
+                        <select class="form-input" id="proj-quality">
+                            <option value="preview">Preview (fast, ~5 min)</option>
+                            <option value="medium" selected>Medium (balanced, ~15 min)</option>
+                            <option value="high">High (best quality, ~45 min)</option>
+                        </select>
+                    </div>
+                    <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
+                        <svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20 6v20M12 14l8-8 8 8"/><path d="M6 28v4a2 2 0 002 2h24a2 2 0 002-2v-4"/></svg>
+                        <p>Drop drone images here or click to browse</p>
+                        <div class="hint">Supports JPG, JPEG, PNG, TIF, DNG</div>
+                    </div>
+                    <input type="file" id="file-input" multiple accept=".jpg,.jpeg,.png,.tif,.tiff,.dng" style="display:none" onchange="handleFiles(this.files)" />
+                    <div id="upload-status" style="margin-top:12px;font-size:12px;color:var(--fb-text-tertiary);"></div>
+                </div>
+
+                <!-- FlytBase Import Tab -->
+                <div class="tab-panel" id="tab-flytbase">
+                    <div class="form-group">
+                        <label class="form-label">Project Name</label>
+                        <input class="form-input" id="fb-proj-name" placeholder="e.g., March 2026 Survey" />
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">FlytBase API URL</label>
+                        <input class="form-input" id="fb-api-url" placeholder="https://api.flytbase.com" />
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">API Key</label>
+                        <input class="form-input" id="fb-api-key" type="password" placeholder="Your FlytBase API key" />
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Gallery / Mission ID</label>
+                        <input class="form-input" id="fb-gallery-id" placeholder="Gallery or mission ID to fetch images from" />
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Quality</label>
+                        <select class="form-input" id="fb-quality">
+                            <option value="preview">Preview</option>
+                            <option value="medium" selected>Medium</option>
+                            <option value="high">High</option>
+                        </select>
+                    </div>
+                    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;">
+                        <button class="btn" onclick="closeModal('new-project-modal')">Cancel</button>
+                        <button class="btn btn-primary" onclick="importFromFlytBase()">
+                            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2v9M4 7l4 4 4-4M2 13h12"/></svg>
+                            Import &amp; Process
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+        let currentSiteId = null;
+
+        // ── Load Dashboard ──
+        async function loadDashboard() {
+            const sites = await fetch('/api/sites').then(r => r.json());
+
+            // Stats
+            const totalProjects = sites.reduce((s, site) => s + (site.project_count || 0), 0);
+            document.getElementById('stats-row').innerHTML = `
+                <div class="stat-card"><div class="value primary">${sites.length}</div><div class="label">Sites</div></div>
+                <div class="stat-card"><div class="value accent">${totalProjects}</div><div class="label">Projects</div></div>
+                <div class="stat-card"><div class="value success">${sites.filter(s => s.status === 'active').length}</div><div class="label">Active</div></div>
+                <div class="stat-card"><div class="value">72</div><div class="label">Images Processed</div></div>
+            `;
+
+            // Grid
+            const grid = document.getElementById('site-grid');
+            grid.innerHTML = '';
+
+            sites.forEach(site => {
+                const latest = site.latest_project;
+                const card = document.createElement('div');
+                card.className = 'site-card';
+                card.onclick = () => {
+                    if (latest) {
+                        location.href = `/project/${latest.id}`;
+                    }
+                };
+                card.innerHTML = `
+                    ${site.thumbnail_url
+                        ? `<img class="site-card-thumb" src="${site.thumbnail_url}" alt="${site.name}" />`
+                        : `<div class="site-card-thumb placeholder">No survey data yet</div>`
+                    }
+                    <div class="site-card-body">
+                        <div class="site-card-name">${site.name}</div>
+                        <div class="site-card-meta">${site.description || 'No description'}</div>
+                        <div class="site-card-tags">
+                            ${(site.tags || []).map(t => `<span class="site-tag">${t}</span>`).join('')}
+                        </div>
+                    </div>
+                    <div class="site-card-footer">
+                        <span class="stat"><span class="status-dot active"></span> <b>${site.project_count || 0}</b> project${site.project_count !== 1 ? 's' : ''}</span>
+                        <span class="stat">${site.latitude?.toFixed(4) || '—'}, ${site.longitude?.toFixed(4) || '—'}</span>
+                        <button class="btn" style="font-size:11px;padding:4px 10px;" onclick="event.stopPropagation();openNewProjectModal('${site.id}')">+ Project</button>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+
+            // New site card
+            const newCard = document.createElement('div');
+            newCard.className = 'site-card new-site-card';
+            newCard.onclick = openNewSiteModal;
+            newCard.innerHTML = `
+                <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="16" cy="16" r="14"/><path d="M16 10v12M10 16h12"/></svg>
+                <p>Add New Site</p>
+            `;
+            grid.appendChild(newCard);
+        }
+
+        // ── Modals ──
+        function openNewSiteModal() { document.getElementById('new-site-modal').classList.add('show'); }
+        function openNewProjectModal(siteId) { currentSiteId = siteId; document.getElementById('new-project-modal').classList.add('show'); }
+        function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+
+        // ── Tabs ──
+        function switchTab(tab) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+            event.target.classList.add('active');
+            document.getElementById('tab-' + tab).classList.add('active');
+        }
+
+        // ── Create Site ──
+        async function createSite() {
+            const form = new FormData();
+            form.append('name', document.getElementById('site-name').value);
+            form.append('description', document.getElementById('site-desc').value);
+            form.append('latitude', document.getElementById('site-lat').value || '0');
+            form.append('longitude', document.getElementById('site-lon').value || '0');
+            form.append('tags', document.getElementById('site-tags').value);
+
+            await fetch('/api/sites', { method: 'POST', body: form });
+            closeModal('new-site-modal');
+            toast('Site created');
+            loadDashboard();
+        }
+
+        // ── Upload Files ──
+        async function handleFiles(files) {
+            if (!currentSiteId) return;
+            const name = document.getElementById('proj-name').value || `Survey — ${new Date().toLocaleDateString()}`;
+            const quality = document.getElementById('proj-quality').value;
+
+            // Create project
+            const form = new FormData();
+            form.append('site_id', currentSiteId);
+            form.append('name', name);
+            form.append('quality', quality);
+            const proj = await fetch('/api/projects', { method: 'POST', body: form }).then(r => r.json());
+
+            // Upload images
+            document.getElementById('upload-status').textContent = `Uploading ${files.length} images...`;
+            const uploadForm = new FormData();
+            for (const f of files) uploadForm.append('files', f);
+            await fetch(`/api/projects/${proj.id}/upload`, { method: 'POST', body: uploadForm });
+
+            document.getElementById('upload-status').textContent = `Uploaded ${files.length} images. Starting processing...`;
+
+            // Start processing
+            const { job_id } = await fetch(`/api/projects/${proj.id}/process`, { method: 'POST' }).then(r => r.json());
+            closeModal('new-project-modal');
+            toast('Processing started — this will take 15-45 minutes');
+            pollJob(job_id, proj.id);
+        }
+
+        // ── FlytBase Import ──
+        async function importFromFlytBase() {
+            if (!currentSiteId) return;
+            const name = document.getElementById('fb-proj-name').value || `FlytBase Import — ${new Date().toLocaleDateString()}`;
+            const quality = document.getElementById('fb-quality').value;
+
+            // Create project
+            const form = new FormData();
+            form.append('site_id', currentSiteId);
+            form.append('name', name);
+            form.append('quality', quality);
+            const proj = await fetch('/api/projects', { method: 'POST', body: form }).then(r => r.json());
+
+            // Import from FlytBase
+            const importForm = new FormData();
+            importForm.append('api_key', document.getElementById('fb-api-key').value);
+            importForm.append('api_url', document.getElementById('fb-api-url').value);
+            importForm.append('gallery_id', document.getElementById('fb-gallery-id').value);
+
+            const { job_id } = await fetch(`/api/projects/${proj.id}/import-flytbase`, { method: 'POST', body: importForm }).then(r => r.json());
+            closeModal('new-project-modal');
+            toast('Importing from FlytBase... Processing will start automatically.');
+            pollJob(job_id, proj.id);
+        }
+
+        // ── Poll Job ──
+        async function pollJob(jobId, projectId) {
+            const check = async () => {
+                const job = await fetch(`/api/jobs/${jobId}`).then(r => r.json());
+                if (job.status === 'completed') {
+                    toast('Processing complete! Opening map...');
+                    setTimeout(() => location.href = `/project/${projectId}`, 1500);
+                } else if (job.status === 'failed') {
+                    toast('Processing failed: ' + job.message);
+                } else {
+                    toast(`${job.message} (${job.progress}%)`);
+                    setTimeout(check, 5000);
+                }
+            };
+            setTimeout(check, 3000);
+        }
+
+        // ── Drop Zone ──
+        const dz = document.getElementById('drop-zone');
+        if (dz) {
+            dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('dragover'); });
+            dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+            dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('dragover'); handleFiles(e.dataTransfer.files); });
+        }
+
+        // ── Toast ──
+        function toast(msg) {
+            const t = document.getElementById('toast');
+            t.textContent = msg;
+            t.classList.add('show');
+            setTimeout(() => t.classList.remove('show'), 3000);
+        }
+
+        // ── Keyboard ──
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape') {
+                closeModal('new-site-modal');
+                closeModal('new-project-modal');
+            }
+        });
+
+        // Init
+        loadDashboard();
+    </script>
+</body>
+</html>

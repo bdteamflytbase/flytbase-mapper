@@ -1,0 +1,16 @@
+{
+  "status": "completed",
+  "project_id": "proj001",
+  "image_1": "odm_orthophoto.jpg",
+  "image_2": "orthomosaic_earlier.jpg",
+  "image_dimensions": {
+    "width": 14843,
+    "height": 10787
+  },
+  "total_changed_area_pct": 0.0,
+  "total_changed_pixels": 0,
+  "total_pixels": 160111441,
+  "change_regions": [],
+  "summary": "Change detection complete. 0.0% of the area changed. Found 0 regions: 0 Major, 0 Moderate, 0 Minor.",
+  "analyzed_at": "2026-03-26T04:46:07.087954"
+}
