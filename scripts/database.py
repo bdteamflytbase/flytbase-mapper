@@ -1,6 +1,12 @@
 """
-FlytBase Mapper — Database Layer
-SQLite for local dev, swap to PostgreSQL/Supabase for production.
+FlytBase Mapper — Database Layer v2
+====================================
+Hierarchy: Site → Project → Mission → Survey → Outputs
+
+Site:    Physical location (e.g., "Shell Deer Park Refinery")
+Project: Specific area/asset being monitored (e.g., "Tank Farm A")
+Mission: FlytBase mission tied to a project (reusable flight plan)
+Survey:  Each time the mission flies — timestamped data + outputs
 """
 
 import json
@@ -8,7 +14,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-from sqlalchemy import create_engine, Column, String, Integer, Float, Text, DateTime, Enum, ForeignKey, JSON
+from sqlalchemy import create_engine, Column, String, Integer, Float, Text, DateTime, ForeignKey, JSON
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 
 DB_PATH = Path(__file__).resolve().parent.parent / "mapper.db"
@@ -21,6 +27,10 @@ def gen_id():
     return str(uuid.uuid4())[:8]
 
 
+# ══════════════════════════════════════════
+# Site — physical location
+# ══════════════════════════════════════════
+
 class Site(Base):
     __tablename__ = "sites"
 
@@ -30,14 +40,14 @@ class Site(Base):
     latitude = Column(Float)
     longitude = Column(Float)
     altitude = Column(Float)
-    boundary_geojson = Column(Text)  # GeoJSON polygon
+    boundary_geojson = Column(Text)
     thumbnail_url = Column(String)
     tags = Column(JSON, default=list)
-    status = Column(String, default="active")  # active, archived
+    status = Column(String, default="active")
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    projects = relationship("Project", back_populates="site", order_by="Project.captured_at.desc()")
+    projects = relationship("Project", back_populates="site", order_by="Project.created_at.desc()")
 
     def to_dict(self):
         return {
@@ -57,6 +67,10 @@ class Site(Base):
         }
 
 
+# ══════════════════════════════════════════
+# Project — specific area/asset being monitored
+# ══════════════════════════════════════════
+
 class Project(Base):
     __tablename__ = "projects"
 
@@ -64,20 +78,23 @@ class Project(Base):
     site_id = Column(String, ForeignKey("sites.id"), nullable=False)
     name = Column(String, nullable=False)
     description = Column(Text, default="")
-    flight_id = Column(String)  # FlytBase mission ID
+    # Legacy fields (kept for backward compat with existing API)
+    flight_id = Column(String)
     drone_model = Column(String)
     captured_at = Column(DateTime)
     image_count = Column(Integer, default=0)
-    image_dir = Column(String)  # local path to images
-    output_dir = Column(String)  # local path to outputs
-    status = Column(String, default="created")  # created, uploading, processing, completed, failed
+    image_dir = Column(String)
+    output_dir = Column(String)
+    status = Column(String, default="created")
     quality = Column(String, default="medium")
     processing_time_s = Column(Integer)
-    gsd_cm = Column(Float)  # ground sampling distance
+    gsd_cm = Column(Float)
     area_hectares = Column(Float)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     site = relationship("Site", back_populates="projects")
+    missions = relationship("Mission", back_populates="project", order_by="Mission.created_at.desc()")
+    surveys = relationship("Survey", back_populates="project", order_by="Survey.captured_at.desc()")
     outputs = relationship("Output", back_populates="project")
     jobs = relationship("Job", back_populates="project")
 
@@ -98,58 +115,155 @@ class Project(Base):
             "area_hectares": self.area_hectares,
             "output_count": len(self.outputs) if self.outputs else 0,
             "outputs": {o.type: o.to_dict() for o in self.outputs} if self.outputs else {},
+            "mission_count": len(self.missions) if self.missions else 0,
+            "survey_count": len(self.surveys) if self.surveys else 0,
+            "latest_survey": self.surveys[0].to_dict() if self.surveys else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
 
-class Output(Base):
-    __tablename__ = "outputs"
+# ══════════════════════════════════════════
+# Mission — reusable flight plan tied to a project
+# ══════════════════════════════════════════
+
+class Mission(Base):
+    __tablename__ = "missions"
 
     id = Column(String, primary_key=True, default=gen_id)
     project_id = Column(String, ForeignKey("projects.id"), nullable=False)
+    name = Column(String, nullable=False)
+    flytbase_mission_id = Column(String)  # FlytBase platform mission ID
+    drone_model = Column(String)
+    flight_altitude_m = Column(Float)
+    overlap_front_pct = Column(Float)
+    overlap_side_pct = Column(Float)
+    quality = Column(String, default="medium")  # default quality for surveys from this mission
+    auto_process = Column(String, default="true")  # auto-process when new survey arrives
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    project = relationship("Project", back_populates="missions")
+    surveys = relationship("Survey", back_populates="mission", order_by="Survey.captured_at.desc()")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "project_id": self.project_id,
+            "name": self.name,
+            "flytbase_mission_id": self.flytbase_mission_id,
+            "drone_model": self.drone_model,
+            "flight_altitude_m": self.flight_altitude_m,
+            "overlap_front_pct": self.overlap_front_pct,
+            "overlap_side_pct": self.overlap_side_pct,
+            "quality": self.quality,
+            "auto_process": self.auto_process,
+            "survey_count": len(self.surveys) if self.surveys else 0,
+            "latest_survey": self.surveys[0].to_dict() if self.surveys else None,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+# ══════════════════════════════════════════
+# Survey — one flight execution (timestamped data)
+# ══════════════════════════════════════════
+
+class Survey(Base):
+    __tablename__ = "surveys"
+
+    id = Column(String, primary_key=True, default=gen_id)
+    project_id = Column(String, ForeignKey("projects.id"), nullable=False)
+    mission_id = Column(String, ForeignKey("missions.id"))  # optional — can be manual upload too
+    name = Column(String, nullable=False)  # e.g., "Survey — Mar 26, 2026 10:30 AM"
+    captured_at = Column(DateTime)
+    drone_model = Column(String)
+    image_count = Column(Integer, default=0)
+    image_dir = Column(String)
+    output_dir = Column(String)
+    status = Column(String, default="created")  # created, uploading, processing, completed, failed
+    quality = Column(String, default="medium")
+    processing_time_s = Column(Integer)
+    gsd_cm = Column(Float)
+    area_hectares = Column(Float)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    project = relationship("Project", back_populates="surveys")
+    mission = relationship("Mission", back_populates="surveys")
+    outputs = relationship("SurveyOutput", back_populates="survey")
+    jobs = relationship("SurveyJob", back_populates="survey")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "project_id": self.project_id,
+            "mission_id": self.mission_id,
+            "name": self.name,
+            "captured_at": self.captured_at.isoformat() if self.captured_at else None,
+            "drone_model": self.drone_model,
+            "image_count": self.image_count,
+            "status": self.status,
+            "quality": self.quality,
+            "processing_time_s": self.processing_time_s,
+            "gsd_cm": self.gsd_cm,
+            "area_hectares": self.area_hectares,
+            "output_count": len(self.outputs) if self.outputs else 0,
+            "outputs": {o.type: o.to_dict() for o in self.outputs} if self.outputs else {},
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+# ══════════════════════════════════════════
+# SurveyOutput — outputs from a specific survey
+# ══════════════════════════════════════════
+
+class SurveyOutput(Base):
+    __tablename__ = "survey_outputs"
+
+    id = Column(String, primary_key=True, default=gen_id)
+    survey_id = Column(String, ForeignKey("surveys.id"), nullable=False)
     type = Column(String, nullable=False)  # orthomosaic, mesh, pointcloud, dsm, dtm
-    format = Column(String, nullable=False)  # tif, obj, laz, jpg
-    storage_path = Column(String)  # local file path
+    format = Column(String, nullable=False)
+    storage_path = Column(String)
     size_bytes = Column(Integer)
     width = Column(Integer)
     height = Column(Integer)
     metadata_json = Column(JSON)
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    project = relationship("Project", back_populates="outputs")
+    survey = relationship("Survey", back_populates="outputs")
 
     def to_dict(self):
         return {
             "id": self.id,
+            "survey_id": self.survey_id,
             "type": self.type,
             "format": self.format,
-            "storage_path": self.storage_path,
             "size_mb": round(self.size_bytes / 1024 / 1024, 1) if self.size_bytes else 0,
-            "width": self.width,
-            "height": self.height,
-            "download_url": f"/api/outputs/{self.id}/download",
+            "download_url": f"/api/survey-outputs/{self.id}/download",
         }
 
 
-class Job(Base):
-    __tablename__ = "jobs"
+# ══════════════════════════════════════════
+# SurveyJob — processing jobs for surveys
+# ══════════════════════════════════════════
+
+class SurveyJob(Base):
+    __tablename__ = "survey_jobs"
 
     id = Column(String, primary_key=True, default=gen_id)
-    project_id = Column(String, ForeignKey("projects.id"), nullable=False)
-    type = Column(String, nullable=False)  # import, process, export
-    status = Column(String, default="queued")  # queued, running, completed, failed
+    survey_id = Column(String, ForeignKey("surveys.id"), nullable=False)
+    type = Column(String, nullable=False)
+    status = Column(String, default="queued")
     progress = Column(Integer, default=0)
     message = Column(String, default="")
     started_at = Column(DateTime)
     completed_at = Column(DateTime)
     error = Column(Text)
 
-    project = relationship("Project", back_populates="jobs")
+    survey = relationship("Survey", back_populates="jobs")
 
     def to_dict(self):
         return {
             "id": self.id,
-            "project_id": self.project_id,
+            "survey_id": self.survey_id,
             "type": self.type,
             "status": self.status,
             "progress": self.progress,
@@ -159,18 +273,72 @@ class Job(Base):
         }
 
 
+# ══════════════════════════════════════════
+# Legacy tables (kept for backward compatibility)
+# ══════════════════════════════════════════
+
+class Output(Base):
+    __tablename__ = "outputs"
+    id = Column(String, primary_key=True, default=gen_id)
+    project_id = Column(String, ForeignKey("projects.id"), nullable=False)
+    type = Column(String, nullable=False)
+    format = Column(String, nullable=False)
+    storage_path = Column(String)
+    size_bytes = Column(Integer)
+    width = Column(Integer)
+    height = Column(Integer)
+    metadata_json = Column(JSON)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    project = relationship("Project", back_populates="outputs")
+
+    def to_dict(self):
+        return {
+            "id": self.id, "type": self.type, "format": self.format,
+            "storage_path": self.storage_path,
+            "size_mb": round(self.size_bytes / 1024 / 1024, 1) if self.size_bytes else 0,
+            "download_url": f"/api/outputs/{self.id}/download",
+        }
+
+
+class Job(Base):
+    __tablename__ = "jobs"
+    id = Column(String, primary_key=True, default=gen_id)
+    project_id = Column(String, ForeignKey("projects.id"), nullable=False)
+    type = Column(String, nullable=False)
+    status = Column(String, default="queued")
+    progress = Column(Integer, default=0)
+    message = Column(String, default="")
+    started_at = Column(DateTime)
+    completed_at = Column(DateTime)
+    error = Column(Text)
+    project = relationship("Project", back_populates="jobs")
+
+    def to_dict(self):
+        return {
+            "id": self.id, "project_id": self.project_id,
+            "type": self.type, "status": self.status,
+            "progress": self.progress, "message": self.message,
+            "started_at": self.started_at.isoformat() if self.started_at else None,
+            "completed_at": self.completed_at.isoformat() if self.completed_at else None,
+        }
+
+
 class Annotation(Base):
     __tablename__ = "annotations"
-
     id = Column(String, primary_key=True, default=gen_id)
     site_id = Column(String, ForeignKey("sites.id"), nullable=False)
     project_id = Column(String, ForeignKey("projects.id"))
+    survey_id = Column(String, ForeignKey("surveys.id"))  # NEW: can be tied to a specific survey
     latitude = Column(Float)
     longitude = Column(Float)
-    type = Column(String, default="note")  # note, measurement, issue, marker
+    type = Column(String, default="note")
     content = Column(JSON)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+
+# ══════════════════════════════════════════
+# Init & Seed
+# ══════════════════════════════════════════
 
 def init_db():
     """Create all tables."""
@@ -181,7 +349,6 @@ def seed_default_data():
     """Seed the database with the existing Pune survey data."""
     session = SessionLocal()
 
-    # Check if already seeded
     if session.query(Site).filter_by(name="Pune Survey Site").first():
         session.close()
         return
@@ -200,7 +367,6 @@ def seed_default_data():
         altitude=609.0,
         thumbnail_url="/assets/odm_orthophoto.jpg",
         tags=["survey", "agriculture", "pune", "india"],
-        status="active",
     )
     session.add(site)
 
@@ -208,11 +374,44 @@ def seed_default_data():
     project = Project(
         id="proj001",
         site_id="pune001",
-        name="Initial Survey — March 2, 2026",
-        description="72 images captured with DJI Mavic 3D at 609m altitude.",
-        flight_id="6b6e18a8-9ccc-4e81-b816-5fa0e15379b9",
+        name="Agricultural Field Monitoring",
+        description="Recurring survey of agricultural fields near Pune.",
         drone_model="DJI Mavic 3D (M3D)",
+        quality="high",
+        status="completed",
+        image_count=72,
+        image_dir=str(PROJECT_ROOT / "images"),
+        output_dir=str(ODM_OUT),
         captured_at=datetime(2026, 3, 2, 16, 47, 28),
+        processing_time_s=4200,
+        gsd_cm=2.0,
+        area_hectares=3.5,
+    )
+    session.add(project)
+
+    # Create mission
+    mission = Mission(
+        id="msn001",
+        project_id="proj001",
+        name="Weekly Field Survey",
+        flytbase_mission_id="6b6e18a8-9ccc-4e81-b816-5fa0e15379b9",
+        drone_model="DJI Mavic 3D (M3D)",
+        flight_altitude_m=609.0,
+        overlap_front_pct=80,
+        overlap_side_pct=70,
+        quality="high",
+        auto_process="true",
+    )
+    session.add(mission)
+
+    # Create survey (the initial flight)
+    survey = Survey(
+        id="srv001",
+        project_id="proj001",
+        mission_id="msn001",
+        name="Survey — March 2, 2026",
+        captured_at=datetime(2026, 3, 2, 16, 47, 28),
+        drone_model="DJI Mavic 3D (M3D)",
         image_count=72,
         image_dir=str(PROJECT_ROOT / "images"),
         output_dir=str(ODM_OUT),
@@ -222,9 +421,9 @@ def seed_default_data():
         gsd_cm=2.0,
         area_hectares=3.5,
     )
-    session.add(project)
+    session.add(survey)
 
-    # Register outputs
+    # Register outputs (legacy)
     output_files = [
         ("orthomosaic", "tif", ODM_OUT / "odm_orthophoto" / "odm_orthophoto.tif", 14843, 10787),
         ("orthomosaic", "jpg", OUTPUT / "odm_orthophoto.jpg", 14843, 10787),
@@ -236,33 +435,23 @@ def seed_default_data():
 
     for otype, fmt, path, w, h in output_files:
         if path.exists():
-            output = Output(
-                project_id="proj001",
-                type=otype,
-                format=fmt,
-                storage_path=str(path),
-                size_bytes=path.stat().st_size,
-                width=w,
-                height=h,
-            )
+            # Legacy output
+            output = Output(project_id="proj001", type=otype, format=fmt,
+                            storage_path=str(path), size_bytes=path.stat().st_size, width=w, height=h)
             session.add(output)
+            # Survey output
+            soutput = SurveyOutput(survey_id="srv001", type=otype, format=fmt,
+                                   storage_path=str(path), size_bytes=path.stat().st_size, width=w, height=h)
+            session.add(soutput)
 
-    # Create completed job
-    job = Job(
-        id="job001",
-        project_id="proj001",
-        type="process",
-        status="completed",
-        progress=100,
-        message="Processing complete",
-        started_at=datetime(2026, 3, 25, 22, 0, 0),
-        completed_at=datetime(2026, 3, 25, 23, 10, 0),
-    )
-    session.add(job)
+    # Legacy job
+    session.add(Job(id="job001", project_id="proj001", type="process", status="completed",
+                    progress=100, message="Processing complete",
+                    started_at=datetime(2026, 3, 25, 22, 0), completed_at=datetime(2026, 3, 25, 23, 10)))
 
     session.commit()
     session.close()
-    print("  Database seeded with Pune survey data.")
+    print("  Database seeded with Pune survey data (v2 — with missions & surveys).")
 
 
 if __name__ == "__main__":

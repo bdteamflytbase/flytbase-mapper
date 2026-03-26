@@ -24,7 +24,8 @@ import cv2
 import numpy as np
 import uvicorn
 
-from database import init_db, seed_default_data, SessionLocal, Site, Project, Output, Job, gen_id
+from database import (init_db, seed_default_data, SessionLocal,
+                       Site, Project, Output, Job, Mission, Survey, SurveyOutput, SurveyJob, gen_id)
 
 # ── Paths ──
 PROJECT = Path(__file__).resolve().parent.parent
@@ -259,6 +260,118 @@ async def project_gallery(project_id: str):
     ], key=lambda x: x["name"])
     db.close()
     return {"project_id": project_id, "count": len(images), "images": images}
+
+
+# ══════════════════════════════════════════
+# Missions
+# ══════════════════════════════════════════
+
+@app.post("/api/projects/{project_id}/missions")
+async def create_mission(
+    project_id: str,
+    name: str = Form(...),
+    flytbase_mission_id: str = Form(""),
+    drone_model: str = Form(""),
+    quality: str = Form("medium"),
+    auto_process: str = Form("true"),
+):
+    db = SessionLocal()
+    project = db.query(Project).filter_by(id=project_id).first()
+    if not project:
+        db.close()
+        raise HTTPException(404, "Project not found")
+    mission = Mission(id=gen_id(), project_id=project_id, name=name,
+                      flytbase_mission_id=flytbase_mission_id, drone_model=drone_model,
+                      quality=quality, auto_process=auto_process)
+    db.add(mission)
+    db.commit()
+    result = mission.to_dict()
+    db.close()
+    return result
+
+
+@app.get("/api/projects/{project_id}/missions")
+async def list_missions(project_id: str):
+    db = SessionLocal()
+    missions = db.query(Mission).filter_by(project_id=project_id).order_by(Mission.created_at.desc()).all()
+    result = [m.to_dict() for m in missions]
+    db.close()
+    return result
+
+
+# ══════════════════════════════════════════
+# Surveys (each flight execution)
+# ══════════════════════════════════════════
+
+@app.post("/api/projects/{project_id}/surveys")
+async def create_survey(
+    project_id: str,
+    name: str = Form(""),
+    mission_id: str = Form(""),
+    quality: str = Form("medium"),
+):
+    db = SessionLocal()
+    project = db.query(Project).filter_by(id=project_id).first()
+    if not project:
+        db.close()
+        raise HTTPException(404, "Project not found")
+    if not name:
+        name = f"Survey — {datetime.utcnow().strftime('%b %d, %Y %H:%M')}"
+    survey_id = gen_id()
+    survey_dir = DATA_DIR / survey_id
+    (survey_dir / "images").mkdir(parents=True, exist_ok=True)
+    (survey_dir / "output").mkdir(exist_ok=True)
+    mission = db.query(Mission).filter_by(id=mission_id).first() if mission_id else None
+    survey = Survey(id=survey_id, project_id=project_id,
+                    mission_id=mission_id if mission_id else None, name=name,
+                    drone_model=mission.drone_model if mission else None,
+                    quality=mission.quality if mission else quality,
+                    image_dir=str(survey_dir / "images"), output_dir=str(survey_dir / "output"))
+    db.add(survey)
+    db.commit()
+    result = survey.to_dict()
+    db.close()
+    return result
+
+
+@app.get("/api/projects/{project_id}/surveys")
+async def list_surveys(project_id: str):
+    db = SessionLocal()
+    surveys = db.query(Survey).filter_by(project_id=project_id).order_by(Survey.captured_at.desc()).all()
+    result = [s.to_dict() for s in surveys]
+    db.close()
+    return result
+
+
+@app.post("/api/surveys/{survey_id}/upload")
+async def upload_survey_images(survey_id: str, files: list[UploadFile] = File(...)):
+    db = SessionLocal()
+    survey = db.query(Survey).filter_by(id=survey_id).first()
+    if not survey:
+        db.close()
+        raise HTTPException(404)
+    image_dir = Path(survey.image_dir)
+    saved = 0
+    for file in files:
+        if file.filename and file.filename.lower().endswith((".jpg", ".jpeg", ".png", ".tif", ".tiff", ".dng")):
+            async with aiofiles.open(image_dir / file.filename, "wb") as f:
+                await f.write(await file.read())
+            saved += 1
+    survey.image_count = len(list(image_dir.iterdir()))
+    survey.status = "uploaded"
+    db.commit()
+    db.close()
+    return {"uploaded": saved, "total_images": survey.image_count}
+
+
+@app.get("/api/projects/{project_id}/survey-timeline")
+async def project_survey_timeline(project_id: str):
+    """All surveys for a project as a timeline — for compare/timelapse."""
+    db = SessionLocal()
+    surveys = db.query(Survey).filter_by(project_id=project_id).order_by(Survey.captured_at).all()
+    result = [s.to_dict() for s in surveys]
+    db.close()
+    return result
 
 
 # ══════════════════════════════════════════
