@@ -600,6 +600,7 @@
 
             sites.forEach(site => {
                 const latest = site.latest_project;
+                const isUpl = latest && ['uploading', 'created'].includes(latest.status);
                 const isProcessing = latest && ['processing', 'uploading', 'importing', 'uploaded', 'created'].includes(latest.status);
                 const isCompleted = latest && latest.status === 'completed';
                 const isFailed = latest && latest.status === 'failed';
@@ -693,12 +694,20 @@
                     </div>
                     ${site.thumbnail_url && isCompleted
                         ? `<img class="site-card-thumb" src="${site.thumbnail_url}" alt="${site.name}" />`
-                        : isProcessing
+                        : isUpl
+                            ? `<div class="site-card-thumb placeholder" style="background:linear-gradient(135deg, rgba(59,141,245,0.06), rgba(0,205,255,0.04));color:var(--fb-text-secondary);">
+                                <div style="text-align:center;">
+                                    <div class="spinner" style="width:28px;height:28px;border-width:2px;margin:0 auto 10px;border-color:rgba(255,255,255,0.06);border-top-color:var(--fb-primary);"></div>
+                                    <div style="font-size:15px;font-weight:600;color:var(--fb-text);">${latest.image_count || 0} images</div>
+                                    <div style="font-size:11px;color:var(--fb-text-tertiary);margin-top:4px;">Uploading to server...</div>
+                                </div>
+                               </div>`
+                        : isProcessing && !isUpl
                             ? `<div class="site-card-thumb placeholder" style="background:linear-gradient(135deg, rgba(245,158,11,0.06), rgba(59,141,245,0.06));color:var(--fb-text-secondary);">
                                 <div style="text-align:center;">
                                     <div class="spinner" style="width:28px;height:28px;border-width:2px;margin:0 auto 10px;border-color:rgba(255,255,255,0.06);border-top-color:var(--fb-accent);"></div>
-                                    <div style="font-size:13px;font-weight:500;color:var(--fb-text);">${latest.image_count || 0} images</div>
-                                    <div style="font-size:11px;color:var(--fb-text-tertiary);margin-top:4px;">Creating your map...</div>
+                                    <div style="font-size:15px;font-weight:600;color:var(--fb-text);">${latest.image_count || 0} images</div>
+                                    <div style="font-size:11px;color:var(--fb-text-tertiary);margin-top:4px;">Generating your 2D &amp; 3D map...</div>
                                 </div>
                                </div>`
                             : `<div class="site-card-thumb placeholder">No survey data yet</div>`
@@ -973,19 +982,31 @@
                 const date = proj.captured_at ? new Date(proj.captured_at).toLocaleDateString() : new Date(proj.created_at).toLocaleDateString();
                 const meta = proj.image_count + ' images · ' + (proj.drone_model || 'Unknown drone') + ' · ' + date;
 
+                // Check if this project has an interrupted upload
+                const upState = JSON.parse(localStorage.getItem('mapper_upload') || '{}');
+                const isIncomplete = (status === 'uploading' || status === 'created') && upState.projectId === proj.id && upState.uploaded < upState.total;
+                const needsResume = (status === 'uploading') && proj.image_count > 0 && !isActiveUpload;
+
                 const row = document.createElement('div');
                 row.className = 'project-row';
                 if (isClickable) row.onclick = () => location.href = '/project/' + proj.id;
+                else if (isIncomplete || needsResume) row.onclick = () => { toast('Select the same files to resume upload'); openNewProjectModal(siteId); };
                 else row.onclick = () => toast(statusDetail);
+
+                // Resume button
+                const resumeBtn = (isIncomplete || needsResume)
+                    ? '<button class="btn" style="font-size:11px;padding:4px 10px;margin-top:6px;color:var(--fb-primary);border-color:rgba(59,141,245,0.3);" onclick="event.stopPropagation();openNewProjectModal(\'' + siteId + '\')">Resume Upload</button>'
+                    : '';
 
                 row.innerHTML = `
                     <div class="proj-icon ${status}">${iconSvg}</div>
                     <div class="proj-info">
                         <div class="proj-name">${proj.name}</div>
                         <div class="proj-meta">${meta}</div>
+                        ${resumeBtn}
                     </div>
                     <div class="proj-status">
-                        <div class="proj-status-label ${status}">${status}</div>
+                        <div class="proj-status-label ${status === 'uploading' ? 'uploading' : status}">${status === 'uploading' ? 'UPLOADING' : status.toUpperCase()}</div>
                         <div class="proj-status-detail">${statusDetail}</div>
                         ${progressHtml}
                     </div>
@@ -1114,6 +1135,12 @@
             // Filter out already-uploaded files (for resume)
             const remaining = files.filter(f => !uploadedNames.has(f.name));
 
+            if (remaining.length === 0 && uploaded >= totalCount) {
+                // All files already uploaded — go straight to finalize
+                await finalizeAndProcess(projectId, totalCount, quality);
+                return;
+            }
+
             for (let i = 0; i < remaining.length; i += BATCH_SIZE) {
                 const batch = remaining.slice(i, i + BATCH_SIZE);
                 const batchForm = new FormData();
@@ -1124,7 +1151,7 @@
                     for (const f of batch) uploadedNames.add(f.name);
                     uploaded = uploadedNames.size;
 
-                    // Save progress to localStorage after every batch
+                    // Save progress after every batch
                     localStorage.setItem('mapper_upload', JSON.stringify({
                         projectId: projectId,
                         total: totalCount,
@@ -1134,19 +1161,35 @@
                         startedAt: state.startedAt || Date.now()
                     }));
 
-                    // Refresh dashboard every 20 images to update card
-                    if (uploaded % 20 === 0 || uploaded === totalCount) loadDashboard();
+                    // Refresh dashboard every batch to update card progress
+                    loadDashboard();
                 } catch (e) {
-                    toast('Upload paused — ' + uploaded + '/' + totalCount + ' saved. Refresh to resume.');
+                    toast('Upload paused at ' + uploaded + '/' + totalCount + '. Refresh page, then click "Resume" on the project.');
+                    loadDashboard();
                     return;
                 }
             }
 
-            // Upload complete — start processing
+            // All uploaded — finalize and start processing
+            await finalizeAndProcess(projectId, totalCount, quality);
+        }
+
+        async function finalizeAndProcess(projectId, totalCount, quality) {
+            // Verify all images received
+            const check = await fetch('/api/projects/' + projectId + '/finalize-upload?expected_total=' + totalCount, { method: 'POST' }).then(r => r.json());
+
+            if (check.status === 'incomplete') {
+                toast('Upload incomplete: ' + check.received + '/' + check.expected + '. Click "Resume" to upload remaining.');
+                loadDashboard();
+                return;
+            }
+
+            // Clear upload state
             localStorage.removeItem('mapper_upload');
-            toast('All ' + totalCount + ' images uploaded — starting processing...');
+            toast('All ' + totalCount + ' images uploaded — generating your map...');
             loadDashboard();
 
+            // Start processing
             const { job_id } = await fetch('/api/projects/' + projectId + '/process', { method: 'POST' }).then(r => r.json());
             toast('Map is being created — ' + estimateTime(totalCount, quality));
             loadDashboard();
@@ -1156,13 +1199,12 @@
         async function checkPendingUploads() {
             const state = JSON.parse(localStorage.getItem('mapper_upload') || '{}');
             if (!state.projectId || !state.total) return;
-
-            // There was an interrupted upload — show it on the dashboard
-            // The files are lost from browser memory, but the server has what was received
-            // User needs to re-select files to resume
-            if (state.uploaded < state.total) {
-                toast('Interrupted upload detected: ' + state.uploaded + '/' + state.total + ' images. Re-select files on the project to resume.');
+            if (state.uploaded >= state.total) {
+                // Upload was complete but processing may not have started
+                localStorage.removeItem('mapper_upload');
+                return;
             }
+            toast('Upload interrupted: ' + state.uploaded + '/' + state.total + ' images. Click the project and "Resume Upload".');
         }
 
         // ── Init + auto-refresh ──

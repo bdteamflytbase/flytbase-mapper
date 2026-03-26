@@ -397,12 +397,40 @@ async def upload_images(project_id: str, files: list[UploadFile] = File(...)):
             saved += 1
 
     project.image_count = len(list(image_dir.iterdir()))
-    project.status = "uploaded"
+    # Only set "uploading" — "uploaded" should be set explicitly when all images are confirmed
+    if project.status == "created":
+        project.status = "uploading"
     db.commit()
 
     result = {"uploaded": saved, "total_images": project.image_count}
     db.close()
     return result
+
+
+@app.post("/api/projects/{project_id}/finalize-upload")
+async def finalize_upload(project_id: str, expected_total: int = 0):
+    """Mark upload as complete. If expected_total > 0, verify count matches."""
+    db = SessionLocal()
+    project = db.query(Project).filter_by(id=project_id).first()
+    if not project:
+        db.close()
+        raise HTTPException(404)
+
+    actual = project.image_count
+    if expected_total > 0 and actual < expected_total:
+        db.close()
+        return {
+            "status": "incomplete",
+            "expected": expected_total,
+            "received": actual,
+            "missing": expected_total - actual,
+            "message": f"Only {actual}/{expected_total} images received. Resume upload to send remaining."
+        }
+
+    project.status = "uploaded"
+    db.commit()
+    db.close()
+    return {"status": "complete", "total_images": actual}
 
 
 # ══════════════════════════════════════════
