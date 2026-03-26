@@ -141,34 +141,36 @@
         ::-webkit-scrollbar-thumb { background: var(--fb-surface-hover); border-radius: 3px; }
 
         /* ── Select Mode ── */
+        .site-card { position: relative; }
         .site-card .select-checkbox {
             position: absolute;
-            top: 12px;
-            left: 12px;
-            width: 22px;
-            height: 22px;
-            border-radius: 6px;
-            border: 2px solid rgba(255,255,255,0.25);
-            background: rgba(8, 13, 22, 0.6);
+            top: 10px;
+            left: 10px;
+            width: 24px;
+            height: 24px;
+            border-radius: 7px;
+            border: 2px solid rgba(255,255,255,0.4);
+            background: rgba(0, 0, 0, 0.5);
             backdrop-filter: blur(8px);
             cursor: pointer;
-            z-index: 5;
+            z-index: 20;
             display: flex;
             align-items: center;
             justify-content: center;
             opacity: 0;
-            transition: all 180ms;
+            transition: opacity 180ms, background 180ms, border-color 180ms;
+            pointer-events: auto;
         }
-        .site-card:hover .select-checkbox,
-        .site-card.selected .select-checkbox { opacity: 1; }
+        .site-card:hover .select-checkbox { opacity: 1; }
         .site-card.selected .select-checkbox {
+            opacity: 1;
             background: var(--fb-primary);
             border-color: var(--fb-primary);
+            box-shadow: 0 2px 8px rgba(59,141,245,0.3);
         }
         .site-card.selected .select-checkbox svg { display: block; }
         .site-card .select-checkbox svg { display: none; }
         .site-card.selected { outline: 2px solid var(--fb-primary); outline-offset: -2px; }
-        .site-card { position: relative; }
 
         /* ── Bulk Action Bar ── */
         .action-bar {

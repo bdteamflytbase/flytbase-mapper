@@ -1192,6 +1192,21 @@
         }
         .area-complete-btn:hover { background: #2bc48a; transform: scale(1.05); }
 
+        /* Area tooltip shown on polygon */
+        .area-tooltip {
+            background: rgba(8, 13, 22, 0.9) !important;
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(59, 141, 245, 0.3) !important;
+            border-radius: 8px !important;
+            padding: 6px 12px !important;
+            font-size: 14px !important;
+            font-weight: 700 !important;
+            font-family: 'JetBrains Mono', monospace !important;
+            color: #3b8df5 !important;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.4) !important;
+        }
+        .area-tooltip::before { display: none !important; }
+
         /* Running perimeter label */
         .measure-running-label {
             position: absolute;
@@ -2814,15 +2829,34 @@
         };
 
         function updateAreaPolygon() {
-            // Remove old polygon preview
+            // Remove old polygon preview (not from measureLayers — we track it separately)
             if (areaPolygonPreview && orthoMap.hasLayer(areaPolygonPreview)) {
                 orthoMap.removeLayer(areaPolygonPreview);
             }
             if (measurePoints.length >= 2) {
                 areaPolygonPreview = L.polygon(measurePoints, {
-                    color: '#34d399', weight: 2, fillColor: '#34d399', fillOpacity: 0.15, dashArray: '6 4'
+                    color: '#3b8df5', weight: 2.5, fillColor: '#3b8df5', fillOpacity: 0.25
                 }).addTo(orthoMap);
-                measureLayers.push(areaPolygonPreview);
+
+                // Show live area calculation on the polygon
+                if (measurePoints.length >= 3) {
+                    var area = 0;
+                    for (var i = 0; i < measurePoints.length; i++) {
+                        var j = (i + 1) % measurePoints.length;
+                        area += measurePoints[i].lng * measurePoints[j].lat;
+                        area -= measurePoints[j].lng * measurePoints[i].lat;
+                    }
+                    area = Math.abs(area) / 2;
+                    var scaleFactor = 14843 * 0.02 / 1000;
+                    var sqMeters = area * scaleFactor * scaleFactor;
+                    var areaText = sqMeters > 10000 ? (sqMeters/10000).toFixed(2) + ' ha' : sqMeters.toFixed(0) + ' m\u00B2';
+
+                    areaPolygonPreview.bindTooltip(areaText, {
+                        permanent: true,
+                        direction: 'center',
+                        className: 'area-tooltip'
+                    });
+                }
             }
         }
 
@@ -2842,6 +2876,16 @@
             var display = sqMeters > 10000 ? (sqMeters/10000).toFixed(2) + ' ha' : sqMeters.toFixed(0) + ' m\u00B2';
             var perimeter = perimeterOf(pts);
 
+            // Draw final polygon (solid, stays visible)
+            var finalPoly = L.polygon(pts, {
+                color: '#3b8df5', weight: 2.5, fillColor: '#3b8df5', fillOpacity: 0.2
+            }).addTo(orthoMap);
+            finalPoly.bindTooltip(
+                '<div style="text-align:center"><div style="font-size:15px;font-weight:700;">' + display + '</div><div style="font-size:10px;opacity:0.7;">perimeter: ' + formatDist(perimeter) + '</div></div>',
+                { permanent: true, direction: 'center', className: 'area-tooltip' }
+            );
+            measureLayers.push(finalPoly);
+
             if (volumeMode) {
                 showMeasurementInPanel('Calculating...', 'volume estimation');
                 volumeFromLastArea(pts);
@@ -2849,6 +2893,12 @@
                 document.getElementById('btn-measure-vol').classList.remove('active');
             } else {
                 showMeasurementInPanel(display, 'area (approx) \u00b7 perimeter: ' + formatDist(perimeter));
+            }
+
+            // Remove the preview polygon (keep the final one)
+            if (areaPolygonPreview && orthoMap.hasLayer(areaPolygonPreview)) {
+                orthoMap.removeLayer(areaPolygonPreview);
+                areaPolygonPreview = null;
             }
 
             if (areaCompleteBtn && areaCompleteBtn.parentNode) areaCompleteBtn.parentNode.removeChild(areaCompleteBtn);
@@ -2927,15 +2977,16 @@
                 }
 
                 if (measureMode === 'area') {
-                    // Draw draggable point marker
+                    // Draw draggable numbered point marker
                     var ptIndex = measurePoints.length - 1;
-                    var greenIcon = L.divIcon({
+                    var ptNumber = measurePoints.length;
+                    var numberedIcon = L.divIcon({
                         className: '',
-                        html: '<div style="width:12px;height:12px;background:#34d399;border:2px solid white;border-radius:50%;cursor:grab;box-shadow:0 1px 4px rgba(0,0,0,0.3);"></div>',
-                        iconSize: [12, 12],
-                        iconAnchor: [6, 6],
+                        html: '<div style="width:22px;height:22px;background:#3b8df5;border:2px solid white;border-radius:50%;cursor:grab;box-shadow:0 2px 8px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:white;font-family:JetBrains Mono,monospace;">' + ptNumber + '</div>',
+                        iconSize: [22, 22],
+                        iconAnchor: [11, 11],
                     });
-                    var marker = L.marker(e.latlng, { icon: greenIcon, draggable: true }).addTo(orthoMap);
+                    var marker = L.marker(e.latlng, { icon: numberedIcon, draggable: true }).addTo(orthoMap);
                     marker._ptIndex = ptIndex;
                     measureLayers.push(marker);
 

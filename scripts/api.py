@@ -429,14 +429,46 @@ def _run_odm(job_id, project_id):
     ]
 
     try:
+        import re
         process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-        stages = {"opensfm": 20, "openmvs": 50, "odm_meshing": 65, "mvs_texturing": 75, "odm_georeferencing": 85, "odm_orthophoto": 90, "odm_dem": 95}
+        # Each stage maps to a progress range [start, end]
+        stage_ranges = {
+            "opensfm": (10, 30),
+            "openmvs": (30, 65),
+            "odm_meshing": (65, 72),
+            "mvs_texturing": (72, 82),
+            "odm_georeferencing": (82, 88),
+            "odm_orthophoto": (88, 95),
+            "odm_dem": (95, 99),
+        }
+        current_stage = None
+        current_range = (0, 10)
+        update_counter = 0
 
         for line in process.stdout:
-            for stage, pct in stages.items():
-                if stage in line.lower():
-                    job.progress = pct
+            line_lower = line.lower().strip()
+
+            # Detect stage transitions
+            for stage, rng in stage_ranges.items():
+                if stage in line_lower and ("running" in line_lower or "stage" in line_lower or "info" in line_lower):
+                    current_stage = stage
+                    current_range = rng
+                    job.progress = rng[0]
                     job.message = stage.replace("_", " ").title()
+                    db.commit()
+                    break
+
+            # Parse sub-percentages like "estimated depth-maps 263 (91.96%, ...)"
+            pct_match = re.search(r'(\d+\.\d+)%', line)
+            if pct_match and current_stage:
+                sub_pct = float(pct_match.group(1))
+                # Interpolate within the current stage range
+                start, end = current_range
+                interpolated = start + (sub_pct / 100.0) * (end - start)
+                job.progress = min(int(interpolated), end)
+                # Only commit every 10 lines to reduce DB writes
+                update_counter += 1
+                if update_counter % 10 == 0:
                     db.commit()
 
         process.wait()
