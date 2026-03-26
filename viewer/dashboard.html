@@ -485,7 +485,7 @@
 
             sites.forEach(site => {
                 const latest = site.latest_project;
-                const isProcessing = latest && ['processing', 'uploading', 'importing'].includes(latest.status);
+                const isProcessing = latest && ['processing', 'uploading', 'importing', 'uploaded', 'created'].includes(latest.status);
                 const isCompleted = latest && latest.status === 'completed';
                 const isFailed = latest && latest.status === 'failed';
 
@@ -616,15 +616,28 @@
 
         // ── Modals ──
         function openNewSiteModal() { document.getElementById('new-site-modal').classList.add('show'); }
+        let isUploading = false;
+
         function openNewProjectModal(siteId) {
             currentSiteId = siteId;
             selectedFiles = null;
+            isUploading = false;
             document.getElementById('upload-status').style.display = 'none';
             document.getElementById('upload-actions').style.display = 'none';
             document.getElementById('drop-zone').style.display = '';
             document.getElementById('new-project-modal').classList.add('show');
         }
-        function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+        function closeModal(id) {
+            if (id === 'new-project-modal' && isUploading) {
+                toast('Upload in progress — please wait');
+                return;
+            }
+            if (id === 'new-project-modal' && selectedFiles && !isUploading) {
+                if (!confirm('You have files selected but not uploaded. Close anyway?')) return;
+            }
+            selectedFiles = null;
+            document.getElementById(id).classList.remove('show');
+        }
 
         // ── Tabs ──
         function switchTab(tab) {
@@ -665,9 +678,11 @@
         // ── Upload & Process (step 2 — triggered by button) ──
         async function startUploadAndProcess() {
             if (!currentSiteId || !selectedFiles) return;
+            isUploading = true;
 
             const name = document.getElementById('proj-name').value || 'Survey — ' + new Date().toLocaleDateString();
             const quality = document.getElementById('proj-quality').value;
+            const fileCount = selectedFiles.length;
 
             // Show progress
             document.getElementById('upload-actions').style.display = 'none';
@@ -694,10 +709,12 @@
 
             setUploadStatus('Processing started! This will take ' + estimateTime(selectedFiles.length, quality), 35);
 
-            // Close modal after 2 seconds and start dashboard polling
+            // Upload done — allow close and auto-close
+            isUploading = false;
+            selectedFiles = null;
             setTimeout(() => {
-                closeModal('new-project-modal');
-                toast('Map is being created — ' + estimateTime(selectedFiles.length, quality));
+                document.getElementById('new-project-modal').classList.remove('show');
+                toast('Map is being created — ' + estimateTime(fileCount, quality));
                 loadDashboard();
             }, 2000);
         }
