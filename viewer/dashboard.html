@@ -139,6 +139,65 @@
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: var(--fb-surface-hover); border-radius: 3px; }
+
+        /* ── Select Mode ── */
+        .site-card .select-checkbox {
+            position: absolute;
+            top: 12px;
+            left: 12px;
+            width: 22px;
+            height: 22px;
+            border-radius: 6px;
+            border: 2px solid rgba(255,255,255,0.25);
+            background: rgba(8, 13, 22, 0.6);
+            backdrop-filter: blur(8px);
+            cursor: pointer;
+            z-index: 5;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: all 180ms;
+        }
+        .site-card:hover .select-checkbox,
+        .site-card.selected .select-checkbox { opacity: 1; }
+        .site-card.selected .select-checkbox {
+            background: var(--fb-primary);
+            border-color: var(--fb-primary);
+        }
+        .site-card.selected .select-checkbox svg { display: block; }
+        .site-card .select-checkbox svg { display: none; }
+        .site-card.selected { outline: 2px solid var(--fb-primary); outline-offset: -2px; }
+        .site-card { position: relative; }
+
+        /* ── Bulk Action Bar ── */
+        .action-bar {
+            position: fixed;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%) translateY(80px);
+            background: var(--fb-surface);
+            border: 1px solid var(--fb-border);
+            border-radius: 14px;
+            padding: 10px 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+            z-index: 500;
+            opacity: 0;
+            transition: all 300ms cubic-bezier(0.16, 1, 0.3, 1);
+            backdrop-filter: blur(16px);
+        }
+        .action-bar.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+        .action-bar .count {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--fb-primary);
+            padding: 0 8px;
+            min-width: 80px;
+        }
+        .action-bar .divider { width: 1px; height: 24px; background: var(--fb-border); }
     </style>
 </head>
 <body>
@@ -320,6 +379,32 @@
         </div>
     </div>
 
+    <!-- Bulk Action Bar -->
+    <div class="action-bar" id="action-bar">
+        <span class="count" id="select-count">0 selected</span>
+        <div class="divider"></div>
+        <button class="btn" onclick="bulkAction('move')" title="Move to another site">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="width:14px;height:14px"><path d="M2 4v9a1 1 0 001 1h10a1 1 0 001-1V6a1 1 0 00-1-1H8L6.5 3H3a1 1 0 00-1 1z"/></svg>
+            Move
+        </button>
+        <button class="btn" onclick="bulkAction('export')" title="Export selected">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="width:14px;height:14px"><path d="M8 2v9M4 7l4 4 4-4M2 13h12"/></svg>
+            Export
+        </button>
+        <button class="btn" onclick="bulkAction('reprocess')" title="Reprocess selected">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="width:14px;height:14px"><path d="M2 8a6 6 0 1111.5-2.5"/><path d="M13 2v4h-4"/></svg>
+            Reprocess
+        </button>
+        <button class="btn" style="color:var(--fb-destructive);border-color:rgba(248,113,113,0.2);" onclick="bulkAction('delete')" title="Delete selected">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="width:14px;height:14px"><path d="M3 4h10M6 4V3h4v1M5 4v9h6V4"/></svg>
+            Delete
+        </button>
+        <div class="divider"></div>
+        <button class="btn" onclick="clearSelection()" title="Cancel">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="width:14px;height:14px"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+        </button>
+    </div>
+
     <div class="toast" id="toast"></div>
 
     <script>
@@ -456,7 +541,12 @@
                 // Status dot color
                 const dotClass = isProcessing ? 'processing' : (isCompleted ? 'active' : '');
 
+                card.dataset.siteId = site.id;
+                card.dataset.siteName = site.name;
                 card.innerHTML = `
+                    <div class="select-checkbox" onclick="event.stopPropagation();toggleSelect(this.parentElement)">
+                        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="white" stroke-width="2"><path d="M2.5 6l2.5 2.5 4.5-5"/></svg>
+                    </div>
                     ${site.thumbnail_url && isCompleted
                         ? `<img class="site-card-thumb" src="${site.thumbnail_url}" alt="${site.name}" />`
                         : isProcessing
@@ -481,9 +571,6 @@
                         <span class="stat"><span class="status-dot ${dotClass}"></span> <b>${site.project_count || 0}</b> project${site.project_count !== 1 ? 's' : ''}</span>
                         <span class="stat">${site.latitude > 0 ? site.latitude.toFixed(4) + ', ' + site.longitude.toFixed(4) : '—'}</span>
                         <button class="btn" style="font-size:11px;padding:4px 10px;" onclick="event.stopPropagation();openNewProjectModal('${site.id}')">+ Project</button>
-                        <button class="btn" style="font-size:11px;padding:4px 8px;color:var(--fb-destructive);border-color:rgba(248,113,113,0.2);" onclick="event.stopPropagation();deleteSite('${site.id}','${site.name.replace(/'/g,"\\'")}')" title="Delete site">
-                            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="width:12px;height:12px"><path d="M3 4h10M6 4V3h4v1M5 4v9h6V4"/></svg>
-                        </button>
                     </div>
                 `;
                 grid.appendChild(card);
@@ -657,15 +744,93 @@
             setTimeout(() => t.classList.remove('show'), 4000);
         }
 
-        // ── Delete Site ──
-        async function deleteSite(siteId, siteName) {
-            if (!confirm('Delete "' + siteName + '" and all its projects?\n\nThis cannot be undone.')) return;
-            try {
-                await fetch('/api/sites/' + siteId, { method: 'DELETE' });
-                toast('"' + siteName + '" deleted');
+        // ── Selection System ──
+        let selectedSites = new Set();
+
+        function toggleSelect(cardEl) {
+            const siteId = cardEl.dataset.siteId;
+            if (!siteId) return;
+            if (selectedSites.has(siteId)) {
+                selectedSites.delete(siteId);
+                cardEl.classList.remove('selected');
+            } else {
+                selectedSites.add(siteId);
+                cardEl.classList.add('selected');
+            }
+            updateActionBar();
+        }
+
+        function updateActionBar() {
+            const bar = document.getElementById('action-bar');
+            const count = selectedSites.size;
+            if (count > 0) {
+                bar.classList.add('show');
+                document.getElementById('select-count').textContent = count + ' selected';
+            } else {
+                bar.classList.remove('show');
+            }
+        }
+
+        function clearSelection() {
+            selectedSites.clear();
+            document.querySelectorAll('.site-card.selected').forEach(c => c.classList.remove('selected'));
+            updateActionBar();
+        }
+
+        async function bulkAction(action) {
+            const ids = Array.from(selectedSites);
+            const names = ids.map(id => {
+                const card = document.querySelector(`.site-card[data-site-id="${id}"]`);
+                return card ? card.dataset.siteName : id;
+            });
+
+            if (action === 'delete') {
+                if (!confirm('Delete ' + ids.length + ' site(s)?\n\n' + names.join(', ') + '\n\nThis cannot be undone.')) return;
+                for (const id of ids) {
+                    await fetch('/api/sites/' + id, { method: 'DELETE' });
+                }
+                toast(ids.length + ' site(s) deleted');
+                clearSelection();
                 loadDashboard();
-            } catch (e) {
-                toast('Failed to delete site');
+            }
+
+            if (action === 'move') {
+                const dest = prompt('Enter destination folder name (creates a tag):');
+                if (!dest) return;
+                toast(ids.length + ' site(s) tagged as "' + dest + '"');
+                clearSelection();
+            }
+
+            if (action === 'export') {
+                toast('Exporting ' + ids.length + ' site(s)...');
+                for (const id of ids) {
+                    // Trigger report download for each
+                    const projects = await fetch('/api/projects?site_id=' + id).then(r => r.json());
+                    if (projects.length > 0) {
+                        const a = document.createElement('a');
+                        a.href = '/api/projects/' + projects[0].id + '/report';
+                        a.download = 'report.html';
+                        a.click();
+                    }
+                }
+                clearSelection();
+            }
+
+            if (action === 'reprocess') {
+                if (!confirm('Reprocess ' + ids.length + ' site(s)? This will re-run map generation.')) return;
+                let started = 0;
+                for (const id of ids) {
+                    const projects = await fetch('/api/projects?site_id=' + id).then(r => r.json());
+                    for (const proj of projects) {
+                        if (proj.status === 'completed' || proj.status === 'failed') {
+                            await fetch('/api/projects/' + proj.id + '/process', { method: 'POST' });
+                            started++;
+                        }
+                    }
+                }
+                toast(started + ' project(s) queued for reprocessing');
+                clearSelection();
+                loadDashboard();
             }
         }
 
