@@ -63,7 +63,10 @@ def get_db():
 
 @app.get("/api/health")
 async def health():
-    docker_ok = subprocess.run(["docker", "info"], capture_output=True).returncode == 0
+    try:
+        docker_ok = subprocess.run(["docker", "info"], capture_output=True, timeout=5).returncode == 0
+    except Exception:
+        docker_ok = False
     db = SessionLocal()
     site_count = db.query(Site).count()
     project_count = db.query(Project).count()
