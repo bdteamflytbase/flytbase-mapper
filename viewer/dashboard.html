@@ -536,11 +536,12 @@
                         </div>
                     `;
                 } else if (isProcessing && latest.status === 'created') {
+                    const imgCount = latest.image_count || 0;
                     statusHtml = `
                         <div style="padding:10px 16px;border-top:1px solid var(--fb-border);background:linear-gradient(135deg, rgba(59,141,245,0.04), rgba(52,211,153,0.04));">
                             <div style="display:flex;align-items:center;gap:8px;">
                                 <div class="spinner" style="width:14px;height:14px;border-width:2px;border-top-color:var(--fb-primary);flex-shrink:0;"></div>
-                                <span style="font-size:12px;color:var(--fb-text);font-weight:500;">Uploading images...</span>
+                                <span style="font-size:12px;color:var(--fb-text);font-weight:500;">Uploading images${imgCount > 0 ? ' — ' + imgCount + ' received' : ''}...</span>
                             </div>
                         </div>
                     `;
@@ -710,7 +711,6 @@
             isUploading = false;
             selectedFiles = null;
             document.getElementById('new-project-modal').classList.remove('show');
-            toast('Uploading ' + fileCount + ' images...');
 
             // Step 1: Create project
             const form = new FormData();
@@ -718,12 +718,20 @@
             form.append('name', name);
             form.append('quality', quality);
             const proj = await fetch('/api/projects', { method: 'POST', body: form }).then(r => r.json());
-            loadDashboard(); // Show "uploading" state immediately
+            toast('Uploading ' + fileCount + ' images...');
+            loadDashboard();
 
-            // Step 2: Upload images
-            const uploadForm = new FormData();
-            for (const f of filesToUpload) uploadForm.append('files', f);
-            await fetch('/api/projects/' + proj.id + '/upload', { method: 'POST', body: uploadForm });
+            // Step 2: Upload images in batches with progress
+            const BATCH_SIZE = 20;
+            let uploaded = 0;
+            for (let i = 0; i < filesToUpload.length; i += BATCH_SIZE) {
+                const batch = filesToUpload.slice(i, i + BATCH_SIZE);
+                const batchForm = new FormData();
+                for (const f of batch) batchForm.append('files', f);
+                await fetch('/api/projects/' + proj.id + '/upload', { method: 'POST', body: batchForm });
+                uploaded += batch.length;
+                toast('Uploaded ' + uploaded + ' / ' + fileCount + ' images (' + Math.round(uploaded/fileCount*100) + '%)');
+            }
             toast('Upload complete — starting processing...');
             loadDashboard();
 
