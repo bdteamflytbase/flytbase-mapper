@@ -136,6 +136,105 @@
         .toast { position: fixed; bottom: 24px; right: 24px; background: var(--fb-surface); border: 1px solid var(--fb-border); border-radius: var(--fb-radius); padding: 10px 16px; font-size: 13px; box-shadow: var(--fb-shadow-lg); z-index: 1000; transform: translateY(80px); opacity: 0; transition: all 0.3s; }
         .toast.show { transform: translateY(0); opacity: 1; }
 
+        /* ── Site Detail View ── */
+        .site-detail-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: var(--fb-bg);
+            z-index: 300;
+            overflow-y: auto;
+        }
+        .site-detail-overlay.show { display: block; }
+        .site-detail-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 16px 32px;
+            border-bottom: 1px solid var(--fb-border);
+            position: sticky;
+            top: 0;
+            background: rgba(8,13,22,0.95);
+            backdrop-filter: blur(12px);
+            z-index: 10;
+        }
+        .site-detail-header .back-btn {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+            color: var(--fb-text-secondary);
+            cursor: pointer;
+            padding: 6px 10px;
+            border-radius: var(--fb-radius);
+            border: 1px solid var(--fb-border);
+            background: none;
+            font-family: var(--fb-font);
+            transition: all 200ms;
+        }
+        .site-detail-header .back-btn:hover { background: var(--fb-surface-hover); color: var(--fb-text); }
+        .site-detail-header h2 { font-size: 18px; font-weight: 600; flex: 1; }
+
+        .project-list { padding: 24px 32px; max-width: 900px; }
+        .project-list-title { font-size: 11px; font-weight: 700; color: var(--fb-text-tertiary); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
+
+        .project-row {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 14px 16px;
+            border: 1px solid var(--fb-border);
+            border-radius: var(--fb-radius);
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: all 200ms;
+            background: var(--fb-surface);
+        }
+        .project-row:hover { border-color: var(--fb-primary); background: rgba(59,141,245,0.04); }
+
+        .project-row .proj-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        .project-row .proj-icon.completed { background: rgba(52,211,153,0.1); color: var(--fb-success); }
+        .project-row .proj-icon.processing { background: rgba(245,158,11,0.1); color: var(--fb-accent); }
+        .project-row .proj-icon.uploading { background: rgba(59,141,245,0.1); color: var(--fb-primary); }
+        .project-row .proj-icon.failed { background: rgba(248,113,113,0.1); color: var(--fb-destructive); }
+        .project-row .proj-icon.created { background: rgba(255,255,255,0.04); color: var(--fb-text-tertiary); }
+
+        .project-row .proj-info { flex: 1; }
+        .project-row .proj-name { font-size: 14px; font-weight: 600; color: var(--fb-text); }
+        .project-row .proj-meta { font-size: 11px; color: var(--fb-text-tertiary); margin-top: 3px; font-family: var(--fb-mono); }
+
+        .project-row .proj-status { text-align: right; }
+        .project-row .proj-status-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+        .project-row .proj-status-label.completed { color: var(--fb-success); }
+        .project-row .proj-status-label.processing { color: var(--fb-accent); }
+        .project-row .proj-status-label.uploading, .project-row .proj-status-label.uploaded { color: var(--fb-primary); }
+        .project-row .proj-status-label.failed { color: var(--fb-destructive); }
+        .project-row .proj-status-label.created { color: var(--fb-text-tertiary); }
+        .project-row .proj-status-detail { font-size: 10px; color: var(--fb-text-tertiary); margin-top: 2px; font-family: var(--fb-mono); }
+
+        .project-row .proj-progress {
+            width: 80px;
+            height: 4px;
+            background: rgba(255,255,255,0.06);
+            border-radius: 2px;
+            overflow: hidden;
+            margin-top: 4px;
+        }
+        .project-row .proj-progress-bar {
+            height: 100%;
+            border-radius: 2px;
+            background: linear-gradient(90deg, #f59e0b, #3b8df5);
+            transition: width 0.5s;
+        }
+
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: var(--fb-surface-hover); border-radius: 3px; }
@@ -381,6 +480,22 @@
         </div>
     </div>
 
+    <!-- Site Detail View -->
+    <div class="site-detail-overlay" id="site-detail">
+        <div class="site-detail-header">
+            <button class="back-btn" onclick="closeSiteDetail()">
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 3L5 7l4 4"/></svg>
+                All Sites
+            </button>
+            <h2 id="site-detail-name">—</h2>
+            <button class="btn btn-primary" onclick="openNewProjectModal(currentDetailSiteId)" style="font-size:12px;">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px"><path d="M8 3v10M3 8h10"/></svg>
+                New Project
+            </button>
+        </div>
+        <div class="project-list" id="project-list"></div>
+    </div>
+
     <!-- Bulk Action Bar -->
     <div class="action-bar" id="action-bar">
         <span class="count" id="select-count">0 selected</span>
@@ -494,16 +609,7 @@
 
                 const card = document.createElement('div');
                 card.className = 'site-card';
-                card.onclick = () => {
-                    if (isCompleted) {
-                        location.href = '/project/' + latest.id;
-                    } else if (isProcessing) {
-                        const msg = activeJob ? friendlyStage(activeJob.message, activeJob.progress, activeJob.type) + ' (' + activeJob.progress + '%)' : 'Processing — please wait';
-                        toast(msg);
-                    } else {
-                        toast('No completed map yet. Click + Project to start.');
-                    }
-                };
+                card.onclick = () => openSiteDetail(site.id, site.name);
 
                 // Status badge
                 let statusHtml = '';
@@ -783,6 +889,95 @@
             t.textContent = msg;
             t.classList.add('show');
             setTimeout(() => t.classList.remove('show'), 4000);
+        }
+
+        // ── Site Detail (Folder View) ──
+        let currentDetailSiteId = null;
+
+        async function openSiteDetail(siteId, siteName) {
+            currentDetailSiteId = siteId;
+            document.getElementById('site-detail-name').textContent = siteName;
+            document.getElementById('site-detail').classList.add('show');
+
+            // Load all projects for this site
+            const projects = await fetch('/api/projects?site_id=' + siteId).then(r => r.json());
+            const allJobs = await fetch('/api/jobs').then(r => r.json());
+
+            const list = document.getElementById('project-list');
+            list.innerHTML = '<div class="project-list-title">Projects (' + projects.length + ')</div>';
+
+            if (projects.length === 0) {
+                list.innerHTML += '<div style="padding:40px;text-align:center;color:var(--fb-text-tertiary);font-size:13px;">No projects yet. Click "New Project" to get started.</div>';
+                return;
+            }
+
+            projects.forEach(proj => {
+                const job = allJobs.find(j => j.project_id === proj.id && j.status === 'running');
+                const status = proj.status || 'created';
+                const isClickable = status === 'completed';
+
+                // Status icon
+                let iconSvg = '';
+                if (status === 'completed') iconSvg = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="width:18px;height:18px"><path d="M3 8l4 4 6-7"/></svg>';
+                else if (status === 'processing') iconSvg = '<div class="spinner" style="width:18px;height:18px;border-width:2px;border-top-color:var(--fb-accent);"></div>';
+                else if (status === 'uploaded' || status === 'created') iconSvg = '<div class="spinner" style="width:18px;height:18px;border-width:2px;border-top-color:var(--fb-primary);"></div>';
+                else if (status === 'failed') iconSvg = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="width:18px;height:18px"><path d="M4 4l8 8M12 4l-8 8"/></svg>';
+                else iconSvg = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="width:18px;height:18px"><circle cx="8" cy="8" r="5"/></svg>';
+
+                // Status detail
+                let statusDetail = '';
+                let progressHtml = '';
+                if (job && status === 'processing') {
+                    statusDetail = friendlyStage(job.message, job.progress, job.type);
+                    progressHtml = '<div class="proj-progress"><div class="proj-progress-bar" style="width:' + job.progress + '%;"></div></div>';
+                } else if (status === 'uploaded') {
+                    statusDetail = 'Waiting to process';
+                } else if (status === 'created') {
+                    statusDetail = proj.image_count > 0 ? proj.image_count + ' images uploaded' : 'Uploading...';
+                } else if (status === 'completed') {
+                    statusDetail = proj.image_count + ' images · ' + (proj.quality || 'medium') + ' quality';
+                } else if (status === 'failed') {
+                    statusDetail = 'Processing failed';
+                }
+
+                // Meta line
+                const date = proj.captured_at ? new Date(proj.captured_at).toLocaleDateString() : new Date(proj.created_at).toLocaleDateString();
+                const meta = proj.image_count + ' images · ' + (proj.drone_model || 'Unknown drone') + ' · ' + date;
+
+                const row = document.createElement('div');
+                row.className = 'project-row';
+                if (isClickable) row.onclick = () => location.href = '/project/' + proj.id;
+                else row.onclick = () => toast(statusDetail);
+
+                row.innerHTML = `
+                    <div class="proj-icon ${status}">${iconSvg}</div>
+                    <div class="proj-info">
+                        <div class="proj-name">${proj.name}</div>
+                        <div class="proj-meta">${meta}</div>
+                    </div>
+                    <div class="proj-status">
+                        <div class="proj-status-label ${status}">${status}</div>
+                        <div class="proj-status-detail">${statusDetail}</div>
+                        ${progressHtml}
+                    </div>
+                `;
+                list.appendChild(row);
+            });
+
+            // Auto-refresh if any project is processing
+            if (projects.some(p => ['processing', 'created', 'uploaded', 'importing'].includes(p.status))) {
+                setTimeout(() => {
+                    if (document.getElementById('site-detail').classList.contains('show') && currentDetailSiteId === siteId) {
+                        openSiteDetail(siteId, siteName);
+                    }
+                }, 5000);
+            }
+        }
+
+        function closeSiteDetail() {
+            document.getElementById('site-detail').classList.remove('show');
+            currentDetailSiteId = null;
+            loadDashboard();
         }
 
         // ── Selection System ──
