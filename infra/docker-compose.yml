@@ -1,0 +1,88 @@
+version: "3.9"
+
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    ports:
+      - "3000:3000"
+    env_file: ../.env
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      SEAWEEDFS_ENDPOINT: http://seaweedfs:8888
+      TITILER_URL: http://titiler:8000
+    depends_on:
+      - seaweedfs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  worker:
+    build:
+      context: ../worker
+      dockerfile: Dockerfile
+    env_file: ../.env
+    environment:
+      SEAWEEDFS_ENDPOINT: http://seaweedfs:8888
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - worker_tmp:/tmp/worker
+    depends_on:
+      - seaweedfs
+    restart: unless-stopped
+
+  seaweedfs:
+    image: chrislusf/seaweedfs:3.65
+    command: >
+      server
+      -dir=/data
+      -s3
+      -s3.config=/etc/seaweedfs/s3.json
+      -s3.port=8888
+      -volume.max=300
+    ports:
+      - "8888:8888"
+    volumes:
+      - seaweedfs_data:/data
+      - ./seaweedfs/s3.json:/etc/seaweedfs/s3.json:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8888/"]
+      interval: 30s
+      retries: 5
+
+  titiler:
+    image: ghcr.io/developmentseed/titiler:latest
+    expose:
+      - "8000"
+    env_file: ../.env
+    environment:
+      AWS_ACCESS_KEY_ID: ${SEAWEEDFS_ACCESS_KEY}
+      AWS_SECRET_ACCESS_KEY: ${SEAWEEDFS_SECRET_KEY}
+      AWS_S3_ENDPOINT: http://seaweedfs:8888
+      AWS_HTTPS: "NO"
+      AWS_VIRTUAL_HOSTING: "FALSE"
+      GDAL_HTTP_UNSAFESSL: "YES"
+      CPL_VSIL_USE_TEMP_FILE_FOR_RANDOM_WRITE: "YES"
+    depends_on:
+      - seaweedfs
+    restart: unless-stopped
+
+volumes:
+  seaweedfs_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /data/mapper/seaweedfs
+  worker_tmp:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /data/mapper/worker_tmp

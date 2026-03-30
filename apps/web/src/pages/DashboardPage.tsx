@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { MapPin, FolderOpen, Layers, ArrowUpRight, Activity } from 'lucide-react';
+import { MapPin, FolderOpen, Layers, ArrowUpRight, Cpu } from 'lucide-react';
 import { sitesApi, projectsApi, jobsApi } from '../lib/api';
 
 export default function DashboardPage() {
@@ -27,123 +27,81 @@ export default function DashboardPage() {
 
   return (
     <div style={{ flex: 1, overflowY: 'auto' }}>
-      <div style={{ padding: '32px 36px', maxWidth: 1280, margin: '0 auto' }}>
+      <div style={{ padding: '36px 40px', maxWidth: 1200, margin: '0 auto' }}>
+
         {/* Header */}
-        <div className="ak-animate-in" style={{ marginBottom: 28 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-            <h1 style={{ fontSize: 24, fontWeight: 700, color: 'var(--ak-text)', letterSpacing: '-0.02em' }}>
-              Site Overview
-            </h1>
-          </div>
-          <p style={{ fontSize: 13, color: 'var(--ak-text-2)', fontWeight: 400 }}>
-            Managing geospatial data across all deployments
+        <div style={{ marginBottom: 32 }}>
+          <h1 style={{
+            fontSize: 26, fontWeight: 700, color: 'var(--ak-text)',
+            letterSpacing: '-0.03em', marginBottom: 4,
+          }}>
+            Sites
+          </h1>
+          <p style={{ fontSize: 14, color: 'var(--ak-text-3)', fontWeight: 400 }}>
+            Manage your mapping projects across all deployments.
           </p>
         </div>
 
-        {/* Stats row */}
-        <div className="ak-stagger" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, marginBottom: 36 }}>
-          <StatCard
-            label="TOTAL SITES"
-            value={sites.length}
-            sub={`${sites.length} active deployment${sites.length !== 1 ? 's' : ''}`}
-            color="var(--ak-primary)"
-            icon={<MapPin size={14} />}
-          />
-          <StatCard
-            label="ACTIVE PROJECTS"
-            value={totalProjects}
-            sub="Across all sites"
-            color="var(--ak-success)"
-            icon={<FolderOpen size={14} />}
-          />
-          <StatCard
-            label="PROCESSING"
-            value={processingCount}
-            sub={processingCount > 0 ? 'Jobs running now' : 'All clear'}
-            color="var(--ak-accent)"
-            icon={<Activity size={14} />}
-          />
+        {/* Stats — clean, minimal */}
+        <div className="ak-stagger" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 40 }}>
+          <StatCard label="Total sites" value={sites.length} />
+          <StatCard label="Active projects" value={totalProjects} />
+          <StatCard label="Processing" value={processingCount} accent />
         </div>
 
-        {/* Site cards grid */}
+        {/* Site cards */}
         {sites.length === 0 ? (
           <EmptyState />
         ) : (
-          <>
-            <div style={{
-              fontSize: 10, fontWeight: 600, color: 'var(--ak-text-3)',
-              letterSpacing: '0.1em', marginBottom: 14,
-            }}>
-              REGIONAL DEPLOYMENTS
-            </div>
-            <div className="ak-stagger" style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
-              gap: 16,
-            }}>
-              {sites.map((site: any) => {
-                const projectCount = allProjects.filter((p: any) => p.site_id === site._id).length;
-                const hasActiveJob = runningJobs.some((j: any) =>
-                  allProjects.some((p: any) => p.site_id === site._id && p._id === j.project_id)
-                );
-                return (
-                  <SiteCard
-                    key={site._id}
-                    site={site}
-                    projectCount={projectCount}
-                    isActive={hasActiveJob}
-                  />
-                );
-              })}
-            </div>
-          </>
+          <div className="ak-stagger" style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+            gap: 16,
+          }}>
+            {sites.map((site: any) => {
+              const projectCount = allProjects.filter((p: any) => p.site_id === site._id).length;
+              const hasActiveJob = runningJobs.some((j: any) =>
+                allProjects.some((p: any) => p.site_id === site._id && p._id === j.project_id)
+              );
+              return (
+                <SiteCard
+                  key={site._id}
+                  site={site}
+                  projectCount={projectCount}
+                  isActive={hasActiveJob}
+                />
+              );
+            })}
+          </div>
         )}
       </div>
     </div>
   );
 }
 
-function StatCard({ label, value, sub, color, icon }: {
-  label: string; value: number | string; sub: string; color: string; icon: React.ReactNode;
+function StatCard({ label, value, accent }: {
+  label: string; value: number | string; accent?: boolean;
 }) {
   return (
-    <div
-      className="ak-animate-in"
-      style={{
-        background: 'rgba(255, 255, 255, 0.03)',
-        border: '1px solid var(--ak-border)',
-        borderRadius: 'var(--ak-radius-lg)',
-        padding: '20px 22px',
-        transition: 'border-color 200ms var(--ak-ease), box-shadow 200ms var(--ak-ease)',
-        cursor: 'default',
-      }}
-      onMouseEnter={e => {
-        e.currentTarget.style.borderColor = 'var(--ak-border-hover)';
-        e.currentTarget.style.boxShadow = 'var(--ak-shadow-sm)';
-      }}
-      onMouseLeave={e => {
-        e.currentTarget.style.borderColor = 'var(--ak-border)';
-        e.currentTarget.style.boxShadow = 'none';
-      }}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-        <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--ak-text-3)', letterSpacing: '0.08em' }}>
-          {label}
-        </div>
-        <div style={{
-          width: 28, height: 28, borderRadius: 7,
-          background: `color-mix(in srgb, ${color} 12%, transparent)`,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          color: color,
-        }}>
-          {icon}
-        </div>
+    <div className="ak-animate-in" style={{
+      background: '#fff',
+      borderRadius: 12,
+      padding: '20px 24px',
+      boxShadow: 'var(--ak-shadow-xs)',
+      border: '1px solid var(--ak-border)',
+    }}>
+      <div style={{
+        fontSize: 12, color: 'var(--ak-text-3)', fontWeight: 500,
+        marginBottom: 8,
+      }}>
+        {label}
       </div>
-      <div style={{ fontSize: 36, fontWeight: 700, color: 'var(--ak-text)', lineHeight: 1, letterSpacing: '-0.02em' }}>
+      <div style={{
+        fontSize: 34, fontWeight: 700,
+        color: accent ? 'var(--ak-primary)' : 'var(--ak-text)',
+        lineHeight: 1, letterSpacing: '-0.03em',
+      }}>
         {value}
-      </div>
-      <div style={{ fontSize: 11, color: 'var(--ak-text-3)', marginTop: 8, fontWeight: 500 }}>
-        {sub}
       </div>
     </div>
   );
@@ -157,51 +115,40 @@ function SiteCard({ site, projectCount, isActive }: { site: any; projectCount: n
       <div
         className="ak-animate-in"
         style={{
-          background: 'rgba(255, 255, 255, 0.02)',
-          border: '1px solid var(--ak-border)',
-          borderRadius: 'var(--ak-radius-lg)',
+          background: '#fff',
+          borderRadius: 14,
           overflow: 'hidden',
           cursor: 'pointer',
-          transition: 'border-color 200ms var(--ak-ease), transform 200ms var(--ak-ease), box-shadow 200ms var(--ak-ease)',
-          position: 'relative',
+          transition: 'box-shadow 200ms, transform 200ms',
+          boxShadow: 'var(--ak-shadow-xs)',
+          border: '1px solid var(--ak-border)',
         }}
         onMouseEnter={e => {
-          const el = e.currentTarget;
-          el.style.borderColor = 'var(--ak-border-active)';
-          el.style.transform = 'translateY(-3px)';
-          el.style.boxShadow = 'var(--ak-shadow-lg)';
+          e.currentTarget.style.boxShadow = 'var(--ak-shadow-lg)';
+          e.currentTarget.style.transform = 'translateY(-2px)';
         }}
         onMouseLeave={e => {
-          const el = e.currentTarget;
-          el.style.borderColor = 'var(--ak-border)';
-          el.style.transform = 'translateY(0)';
-          el.style.boxShadow = 'none';
+          e.currentTarget.style.boxShadow = 'var(--ak-shadow-xs)';
+          e.currentTarget.style.transform = 'translateY(0)';
         }}
       >
-        {/* Thumbnail area */}
+        {/* Thumbnail */}
         <div style={{
-          height: 160,
+          height: 180,
           background: thumbnail
             ? `url(${thumbnail}) center/cover no-repeat`
-            : 'linear-gradient(135deg, #0f1923 0%, #1a2332 50%, #0f1923 100%)',
+            : 'linear-gradient(135deg, #EEF2F7 0%, #E2E8F0 100%)',
           position: 'relative',
         }}>
-          {/* Gradient overlay */}
-          <div style={{
-            position: 'absolute', inset: 0,
-            background: 'linear-gradient(to top, rgba(7,12,20,0.8) 0%, transparent 50%)',
-          }} />
-
           {isActive && (
             <div style={{
               position: 'absolute', top: 12, left: 12,
-              background: 'var(--ak-success)',
-              color: '#070c14', fontSize: 9, fontWeight: 700,
-              padding: '3px 8px', borderRadius: 'var(--ak-radius-sm)',
-              letterSpacing: '0.05em',
-              boxShadow: '0 2px 8px rgba(52, 211, 153, 0.3)',
+              background: 'var(--ak-primary)',
+              color: '#fff', fontSize: 10, fontWeight: 600,
+              padding: '3px 10px', borderRadius: 6,
+              letterSpacing: '0.03em',
             }}>
-              ACTIVE
+              Active
             </div>
           )}
 
@@ -210,40 +157,37 @@ function SiteCard({ site, projectCount, isActive }: { site: any; projectCount: n
               position: 'absolute', inset: 0,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
-              <MapPin size={36} color="var(--ak-text-3)" style={{ opacity: 0.2 }} />
+              <MapPin size={32} color="#C4CDD5" />
             </div>
           )}
 
-          {/* Arrow indicator */}
+          {/* Arrow */}
           <div style={{
             position: 'absolute', bottom: 12, right: 12,
-            width: 28, height: 28, borderRadius: '50%',
-            background: 'rgba(255,255,255,0.08)',
+            width: 30, height: 30, borderRadius: 8,
+            background: 'rgba(255,255,255,0.85)',
             backdropFilter: 'blur(8px)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            transition: 'background 200ms',
           }}>
-            <ArrowUpRight size={14} color="var(--ak-text)" />
+            <ArrowUpRight size={14} color="#1A1D23" />
           </div>
         </div>
 
         {/* Info */}
-        <div style={{ padding: '16px 18px 18px' }}>
+        <div style={{ padding: '16px 20px 20px' }}>
           <div style={{
-            fontSize: 15, fontWeight: 600, color: 'var(--ak-text)',
-            marginBottom: 6, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-            letterSpacing: '-0.01em',
+            fontSize: 16, fontWeight: 600, color: 'var(--ak-text)',
+            marginBottom: 6,
+            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
           }}>
             {site.name}
           </div>
           <div style={{
-            display: 'flex', alignItems: 'center', gap: 12,
-            fontSize: 11, color: 'var(--ak-text-3)', fontWeight: 500,
+            display: 'flex', alignItems: 'center', gap: 4,
+            fontSize: 13, color: 'var(--ak-text-3)', fontWeight: 400,
           }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <FolderOpen size={11} />
-              {projectCount} project{projectCount !== 1 ? 's' : ''}
-            </span>
+            <FolderOpen size={13} />
+            {projectCount} project{projectCount !== 1 ? 's' : ''}
           </div>
         </div>
       </div>
@@ -255,19 +199,20 @@ function EmptyState() {
   return (
     <div className="ak-animate-in" style={{
       display: 'flex', flexDirection: 'column', alignItems: 'center',
-      justifyContent: 'center', height: 320, color: 'var(--ak-text-3)',
+      justifyContent: 'center', height: 320,
+      background: '#fff', borderRadius: 14,
+      border: '1px solid var(--ak-border)',
     }}>
       <div style={{
-        width: 64, height: 64, borderRadius: 16,
-        background: 'rgba(255,255,255,0.03)',
-        border: '1px solid var(--ak-border)',
+        width: 56, height: 56, borderRadius: 14,
+        background: 'var(--ak-bg-page)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         marginBottom: 16,
       }}>
-        <Layers size={28} color="var(--ak-text-3)" />
+        <Layers size={24} color="var(--ak-text-3)" />
       </div>
-      <p style={{ fontSize: 15, color: 'var(--ak-text-2)', marginBottom: 6, fontWeight: 500 }}>No sites found</p>
-      <p style={{ fontSize: 12, color: 'var(--ak-text-3)', maxWidth: 280, textAlign: 'center', lineHeight: 1.5 }}>
+      <p style={{ fontSize: 15, color: 'var(--ak-text)', marginBottom: 4, fontWeight: 500 }}>No sites yet</p>
+      <p style={{ fontSize: 13, color: 'var(--ak-text-3)', maxWidth: 260, textAlign: 'center', lineHeight: 1.5 }}>
         Configure your FlytBase organization to start mapping.
       </p>
     </div>
@@ -276,17 +221,17 @@ function EmptyState() {
 
 function LoadingState() {
   return (
-    <div style={{ padding: '32px 36px' }}>
-      <div className="ak-skeleton" style={{ height: 28, width: 160, marginBottom: 8 }} />
-      <div className="ak-skeleton" style={{ height: 16, width: 300, marginBottom: 28 }} />
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, marginBottom: 36 }}>
+    <div style={{ padding: '36px 40px' }}>
+      <div className="ak-skeleton" style={{ height: 30, width: 120, marginBottom: 8 }} />
+      <div className="ak-skeleton" style={{ height: 16, width: 280, marginBottom: 32 }} />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 40 }}>
         {[1, 2, 3].map(i => (
-          <div key={i} className="ak-skeleton" style={{ height: 120, borderRadius: 12 }} />
+          <div key={i} className="ak-skeleton" style={{ height: 90, borderRadius: 12 }} />
         ))}
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
-        {[...Array(4)].map((_, i) => (
-          <div key={i} className="ak-skeleton" style={{ height: 240, borderRadius: 12 }} />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 16 }}>
+        {[1, 2].map(i => (
+          <div key={i} className="ak-skeleton" style={{ height: 260, borderRadius: 14 }} />
         ))}
       </div>
     </div>
@@ -297,18 +242,8 @@ function ErrorState() {
   return (
     <div className="ak-animate-in" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}>
       <div style={{ textAlign: 'center' }}>
-        <div style={{
-          width: 48, height: 48, borderRadius: 12,
-          background: 'rgba(248,113,113,0.1)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          margin: '0 auto 12px',
-        }}>
-          <span style={{ fontSize: 20 }}>!</span>
-        </div>
-        <p style={{ color: 'var(--ak-danger)', marginBottom: 6, fontSize: 14, fontWeight: 500 }}>Failed to load sites</p>
-        <p style={{ color: 'var(--ak-text-3)', fontSize: 12 }}>
-          Check your FlytBase configuration and try again.
-        </p>
+        <p style={{ color: 'var(--ak-danger)', marginBottom: 6, fontSize: 15, fontWeight: 500 }}>Failed to load sites</p>
+        <p style={{ color: 'var(--ak-text-3)', fontSize: 13 }}>Check your connection and try again.</p>
       </div>
     </div>
   );

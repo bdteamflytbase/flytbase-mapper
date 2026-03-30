@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/layout/Layout';
 
 const HomePage = lazy(() => import('./pages/HomePage'));
+const HomePageAlt = lazy(() => import('./pages/HomePageAlt'));
 const DashboardPage = lazy(() => import('./pages/DashboardPage'));
 const SitePage = lazy(() => import('./pages/SitePage'));
 const ProjectPage = lazy(() => import('./pages/ProjectPage'));
@@ -26,6 +27,7 @@ export default function App() {
       <Routes>
         {/* Homepage — full-screen, no layout chrome */}
         <Route path="/" element={<HomePage />} />
+        <Route path="/alt" element={<HomePageAlt />} />
 
         {/* App routes — wrapped in sidebar layout */}
         <Route path="/dashboard" element={

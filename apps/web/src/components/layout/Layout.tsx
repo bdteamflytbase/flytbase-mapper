@@ -1,175 +1,351 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Map, BarChart3, HelpCircle, LogOut, ChevronLeft, ChevronRight, Hexagon } from 'lucide-react';
+import {
+  Map, BarChart3, HelpCircle, Settings, ChevronLeft, ChevronRight,
+  Hexagon, Layers, Eye, Sliders, Ruler, Download, Image, Mountain, Box
+} from 'lucide-react';
 
-const NAV_MAIN = [
+const NAV_ITEMS = [
   { to: '/dashboard', icon: Map, label: 'Sites' },
   { to: '/analytics', icon: BarChart3, label: 'Analytics' },
 ];
 
-const NAV_BOTTOM = [
-  { to: '#help', icon: HelpCircle, label: 'Help' },
-  { to: '#logout', icon: LogOut, label: 'Logout' },
-];
-
 export default function Layout({ children }: { children: React.ReactNode }) {
   const loc = useLocation();
-  const [collapsed, setCollapsed] = useState(false);
+  const [leftOpen, setLeftOpen] = useState(true);
+  const [rightOpen, setRightOpen] = useState(true);
 
   const isActive = (to: string) => {
     if (to === '/dashboard') return loc.pathname === '/dashboard';
     return loc.pathname.startsWith(to);
   };
 
-  const renderNavItem = (item: { to: string; icon: React.ElementType; label: string }) => {
-    const { to, icon: Icon, label } = item;
-    const active = isActive(to);
-    const isLink = !to.startsWith('#');
-
-    const content = (
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 10,
-          padding: collapsed ? '10px 0' : '10px 12px',
-          justifyContent: collapsed ? 'center' : 'flex-start',
-          borderRadius: 'var(--ak-radius-sm)',
-          marginBottom: 2,
-          color: active ? 'var(--ak-primary)' : 'var(--ak-text-2)',
-          background: active ? 'var(--ak-primary-subtle)' : 'transparent',
-          transition: 'all 150ms var(--ak-ease)',
-          textDecoration: 'none',
-          whiteSpace: 'nowrap',
-          overflow: 'hidden',
-          fontSize: 13,
-          fontWeight: active ? 600 : 400,
-          cursor: 'pointer',
-          position: 'relative',
-        }}
-        onMouseEnter={e => {
-          if (!active) {
-            (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.04)';
-            (e.currentTarget as HTMLElement).style.color = 'var(--ak-text)';
-          }
-        }}
-        onMouseLeave={e => {
-          if (!active) {
-            (e.currentTarget as HTMLElement).style.background = 'transparent';
-            (e.currentTarget as HTMLElement).style.color = 'var(--ak-text-2)';
-          }
-        }}
-      >
-        <Icon size={17} style={{ flexShrink: 0 }} />
-        {!collapsed && <span>{label}</span>}
-      </div>
-    );
-
-    if (isLink) {
-      return <Link key={to} to={to} title={collapsed ? label : undefined} style={{ textDecoration: 'none' }}>{content}</Link>;
-    }
-    return <div key={to} title={collapsed ? label : undefined}>{content}</div>;
-  };
+  // Check if we're on a project page (show right panel)
+  const isProjectView = loc.pathname.includes('/projects/');
 
   return (
-    <div className="flex h-screen overflow-hidden" style={{ background: 'var(--ak-bg)' }}>
-      {/* Sidebar — Glass */}
-      <aside
-        className="ak-glass"
-        style={{
-          width: collapsed ? 56 : 240,
-          borderRight: '1px solid var(--ak-border)',
-          transition: 'width 280ms cubic-bezier(0.16,1,0.3,1)',
-          flexShrink: 0,
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden',
-          zIndex: 10,
-          borderTop: 'none',
-          borderBottom: 'none',
-          borderLeft: 'none',
-        }}
-      >
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: 'var(--ak-bg-page)' }}>
+
+      {/* ═══ TOP BAR ═══ */}
+      <div style={{
+        height: 48,
+        background: 'var(--ak-bg)',
+        borderBottom: '1px solid var(--ak-border)',
+        display: 'flex',
+        alignItems: 'center',
+        padding: '0 12px',
+        gap: 8,
+        flexShrink: 0,
+        zIndex: 20,
+      }}>
         {/* Logo */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 10,
-          padding: collapsed ? '20px 0' : '20px 16px',
-          justifyContent: collapsed ? 'center' : 'flex-start',
-          borderBottom: '1px solid var(--ak-border)',
-          whiteSpace: 'nowrap',
-          overflow: 'hidden',
-        }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 4px' }}>
           <div style={{
-            width: 32, height: 32, borderRadius: 8,
-            background: 'linear-gradient(135deg, var(--ak-primary) 0%, #1A6AE0 100%)',
+            width: 26, height: 26, borderRadius: 7,
+            background: 'var(--ak-primary)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            flexShrink: 0,
-            boxShadow: '0 2px 8px rgba(44, 123, 242, 0.3)',
           }}>
-            <Hexagon size={16} color="#fff" strokeWidth={2.5} />
+            <Hexagon size={13} color="#fff" strokeWidth={2.5} />
           </div>
-          {!collapsed && (
-            <div style={{ overflow: 'hidden' }}>
+          <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--ak-text)', letterSpacing: '0.01em' }}>
+            Akara
+          </span>
+          <span style={{ fontSize: 10, color: 'var(--ak-text-3)', marginLeft: -4 }}>
+            by FlytBase
+          </span>
+        </div>
+
+        {/* Divider */}
+        <div style={{ width: 1, height: 20, background: 'var(--ak-border)', margin: '0 4px' }} />
+
+        {/* Left panel toggle */}
+        <button
+          onClick={() => setLeftOpen(v => !v)}
+          style={{
+            background: leftOpen ? 'var(--ak-bg-warm)' : 'transparent',
+            border: 'none', borderRadius: 6, cursor: 'pointer',
+            color: leftOpen ? 'var(--ak-text)' : 'var(--ak-text-3)',
+            padding: '5px 8px', display: 'flex', alignItems: 'center', gap: 4,
+            fontSize: 11, fontWeight: 500, transition: 'all 120ms',
+          }}
+          onMouseEnter={e => { if (!leftOpen) e.currentTarget.style.background = 'var(--ak-bg-warm)'; }}
+          onMouseLeave={e => { if (!leftOpen) e.currentTarget.style.background = 'transparent'; }}
+          title={leftOpen ? 'Hide sidebar' : 'Show sidebar'}
+        >
+          <Layers size={13} />
+          <span>Panels</span>
+        </button>
+
+        {/* Nav links */}
+        <div style={{ display: 'flex', gap: 2, marginLeft: 4 }}>
+          {NAV_ITEMS.map(({ to, icon: Icon, label }) => {
+            const active = isActive(to);
+            return (
+              <Link key={to} to={to} style={{
+                display: 'flex', alignItems: 'center', gap: 5,
+                padding: '5px 10px', borderRadius: 6,
+                background: active ? 'var(--ak-primary-subtle)' : 'transparent',
+                color: active ? 'var(--ak-primary)' : 'var(--ak-text-2)',
+                fontSize: 12, fontWeight: active ? 600 : 500,
+                textDecoration: 'none', transition: 'all 120ms',
+              }}
+                onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--ak-bg-warm)'; }}
+                onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent'; }}
+              >
+                <Icon size={13} />
+                {label}
+              </Link>
+            );
+          })}
+        </div>
+
+        {/* Spacer */}
+        <div style={{ flex: 1 }} />
+
+        {/* Right side */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          {isProjectView && (
+            <button
+              onClick={() => setRightOpen(v => !v)}
+              style={{
+                background: rightOpen ? 'var(--ak-bg-warm)' : 'transparent',
+                border: 'none', borderRadius: 6, cursor: 'pointer',
+                color: rightOpen ? 'var(--ak-text)' : 'var(--ak-text-3)',
+                padding: '5px 8px', display: 'flex', alignItems: 'center', gap: 4,
+                fontSize: 11, fontWeight: 500, transition: 'all 120ms',
+              }}
+              title={rightOpen ? 'Hide inspector' : 'Show inspector'}
+            >
+              <Sliders size={13} />
+              <span>Inspector</span>
+            </button>
+          )}
+
+          <button style={{
+            background: 'transparent', border: 'none', borderRadius: 6,
+            cursor: 'pointer', color: 'var(--ak-text-3)', padding: 6,
+            display: 'flex', transition: 'all 120ms',
+          }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'var(--ak-bg-warm)'; e.currentTarget.style.color = 'var(--ak-text)'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--ak-text-3)'; }}
+          >
+            <HelpCircle size={15} />
+          </button>
+          <button style={{
+            background: 'transparent', border: 'none', borderRadius: 6,
+            cursor: 'pointer', color: 'var(--ak-text-3)', padding: 6,
+            display: 'flex', transition: 'all 120ms',
+          }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'var(--ak-bg-warm)'; e.currentTarget.style.color = 'var(--ak-text)'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--ak-text-3)'; }}
+          >
+            <Settings size={15} />
+          </button>
+
+          {/* Avatar */}
+          <div style={{
+            width: 28, height: 28, borderRadius: 7,
+            background: 'linear-gradient(135deg, var(--ak-primary), #60A5FA)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: '#fff', fontSize: 11, fontWeight: 700, marginLeft: 4,
+          }}>
+            DG
+          </div>
+        </div>
+      </div>
+
+      {/* ═══ BODY: Left Panel + Canvas + Right Panel ═══ */}
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+
+        {/* Left Panel — project tree / navigation */}
+        {leftOpen && (
+          <aside style={{
+            width: 240,
+            background: 'var(--ak-bg)',
+            borderRight: '1px solid var(--ak-border)',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            flexShrink: 0,
+          }}>
+            {/* Panel header */}
+            <div style={{
+              padding: '12px 14px',
+              borderBottom: '1px solid var(--ak-border)',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            }}>
+              <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--ak-text-2)', letterSpacing: '0.04em' }}>
+                EXPLORER
+              </span>
+            </div>
+
+            {/* Nav items with tree-style */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '8px 8px' }}>
+              {NAV_ITEMS.map(({ to, icon: Icon, label }) => {
+                const active = isActive(to);
+                return (
+                  <Link key={to} to={to} style={{
+                    display: 'flex', alignItems: 'center', gap: 8,
+                    padding: '8px 10px', borderRadius: 7, marginBottom: 2,
+                    background: active ? 'var(--ak-primary-subtle)' : 'transparent',
+                    color: active ? 'var(--ak-primary)' : 'var(--ak-text-2)',
+                    fontSize: 13, fontWeight: active ? 600 : 400,
+                    textDecoration: 'none', transition: 'all 100ms',
+                  }}
+                    onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--ak-surface-hover)'; }}
+                    onMouseLeave={e => { if (!active) e.currentTarget.style.background = active ? 'var(--ak-primary-subtle)' : 'transparent'; }}
+                  >
+                    <Icon size={15} strokeWidth={active ? 2 : 1.5} />
+                    {label}
+                  </Link>
+                );
+              })}
+
+              {/* Quick info */}
               <div style={{
-                fontSize: 16, fontWeight: 800, color: 'var(--ak-text)',
-                letterSpacing: '0.06em',
-                lineHeight: 1,
+                marginTop: 16, padding: '12px',
+                background: 'var(--ak-bg-page)', borderRadius: 8,
               }}>
-                AKARA
-              </div>
-              <div style={{
-                fontSize: 9, fontWeight: 500, color: 'var(--ak-text-3)',
-                letterSpacing: '0.08em', marginTop: 3,
-              }}>
-                by FlytBase
+                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--ak-text-2)', marginBottom: 6 }}>Quick Stats</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {[
+                    { label: 'Sites', value: '2' },
+                    { label: 'Projects', value: '2' },
+                    { label: 'Processed', value: '1' },
+                  ].map(s => (
+                    <div key={s.label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                      <span style={{ color: 'var(--ak-text-3)' }}>{s.label}</span>
+                      <span style={{ color: 'var(--ak-text)', fontWeight: 500 }}>{s.value}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
-          )}
-        </div>
 
-        {/* Main nav */}
-        <nav style={{ flex: 1, padding: '14px 10px 8px' }}>
-          <div style={{
-            fontSize: 9, fontWeight: 600, color: 'var(--ak-text-3)',
-            letterSpacing: '0.1em', padding: '0 12px', marginBottom: 8,
-            opacity: collapsed ? 0 : 1,
-            transition: 'opacity 200ms',
+            {/* Bottom */}
+            <div style={{
+              padding: '10px 12px', borderTop: '1px solid var(--ak-border)',
+              display: 'flex', alignItems: 'center', gap: 6,
+            }}>
+              <HelpCircle size={13} color="var(--ak-text-3)" />
+              <span style={{ fontSize: 11, color: 'var(--ak-text-3)' }}>Help & Resources</span>
+            </div>
+          </aside>
+        )}
+
+        {/* Center Canvas — main content */}
+        <main style={{
+          flex: 1, overflow: 'hidden', minWidth: 0,
+          display: 'flex', flexDirection: 'column',
+          background: 'var(--ak-bg)',
+        }}>
+          {children}
+        </main>
+
+        {/* Right Panel — Inspector (only on project views) */}
+        {isProjectView && rightOpen && (
+          <aside style={{
+            width: 280,
+            background: 'var(--ak-bg)',
+            borderLeft: '1px solid var(--ak-border)',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            flexShrink: 0,
           }}>
-            NAVIGATION
-          </div>
-          {NAV_MAIN.map(renderNavItem)}
-        </nav>
+            {/* Panel header */}
+            <div style={{
+              padding: '12px 14px',
+              borderBottom: '1px solid var(--ak-border)',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            }}>
+              <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--ak-text-2)', letterSpacing: '0.04em' }}>
+                INSPECTOR
+              </span>
+            </div>
 
-        {/* Bottom nav */}
-        <div style={{ padding: '8px 10px', borderTop: '1px solid var(--ak-border)' }}>
-          {NAV_BOTTOM.map(renderNavItem)}
-        </div>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '12px' }}>
+              {/* Layers section */}
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--ak-text-3)', marginBottom: 8, padding: '0 2px' }}>
+                  LAYERS
+                </div>
+                {[
+                  { icon: Image, label: 'Orthomosaic', color: 'var(--ak-primary)' },
+                  { icon: Mountain, label: 'DSM / Elevation', color: 'var(--ak-success)' },
+                  { icon: Mountain, label: 'DTM / Terrain', color: 'var(--ak-warning)' },
+                  { icon: Box, label: '3D Mesh', color: '#8B5CF6' },
+                ].map((layer, i) => (
+                  <div key={i} style={{
+                    display: 'flex', alignItems: 'center', gap: 8,
+                    padding: '7px 8px', borderRadius: 6, marginBottom: 2,
+                    cursor: 'pointer', transition: 'background 100ms',
+                  }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'var(--ak-surface-hover)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                  >
+                    <div style={{
+                      width: 6, height: 6, borderRadius: 2,
+                      background: layer.color,
+                    }} />
+                    <layer.icon size={13} color="var(--ak-text-2)" />
+                    <span style={{ fontSize: 12, color: 'var(--ak-text)', flex: 1 }}>{layer.label}</span>
+                    <Eye size={12} color="var(--ak-text-3)" />
+                  </div>
+                ))}
+              </div>
 
-        {/* Collapse button */}
-        <button
-          onClick={() => setCollapsed(c => !c)}
-          style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            padding: '12px', border: 'none', background: 'transparent',
-            borderTop: '1px solid var(--ak-border)',
-            color: 'var(--ak-text-3)', cursor: 'pointer',
-            transition: 'color 150ms var(--ak-ease)',
-            width: '100%',
-          }}
-          onMouseEnter={e => (e.currentTarget.style.color = 'var(--ak-text)')}
-          onMouseLeave={e => (e.currentTarget.style.color = 'var(--ak-text-3)')}
-          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-        >
-          {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
-        </button>
-      </aside>
+              {/* Tools section */}
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--ak-text-3)', marginBottom: 8, padding: '0 2px' }}>
+                  TOOLS
+                </div>
+                {[
+                  { icon: Ruler, label: 'Measure distance' },
+                  { icon: Layers, label: 'Compare layers' },
+                  { icon: Download, label: 'Export data' },
+                ].map((tool, i) => (
+                  <div key={i} style={{
+                    display: 'flex', alignItems: 'center', gap: 8,
+                    padding: '7px 8px', borderRadius: 6, marginBottom: 2,
+                    cursor: 'pointer', fontSize: 12, color: 'var(--ak-text-2)',
+                    transition: 'all 100ms',
+                  }}
+                    onMouseEnter={e => { e.currentTarget.style.background = 'var(--ak-surface-hover)'; e.currentTarget.style.color = 'var(--ak-text)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--ak-text-2)'; }}
+                  >
+                    <tool.icon size={13} />
+                    <span>{tool.label}</span>
+                  </div>
+                ))}
+              </div>
 
-      {/* Main content */}
-      <main style={{ flex: 1, overflow: 'hidden', minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-        {children}
-      </main>
+              {/* Properties */}
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--ak-text-3)', marginBottom: 8, padding: '0 2px' }}>
+                  PROPERTIES
+                </div>
+                <div style={{
+                  background: 'var(--ak-bg-page)', borderRadius: 8, padding: '10px 12px',
+                  display: 'flex', flexDirection: 'column', gap: 6,
+                }}>
+                  {[
+                    { label: 'GSD', value: '2.0 cm/px' },
+                    { label: 'Area', value: '3.5 ha' },
+                    { label: 'Images', value: '72' },
+                    { label: 'Quality', value: 'High' },
+                  ].map(p => (
+                    <div key={p.label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                      <span style={{ color: 'var(--ak-text-3)' }}>{p.label}</span>
+                      <span style={{ color: 'var(--ak-text)', fontWeight: 500, fontFamily: 'var(--ak-font-mono)', fontSize: 11 }}>{p.value}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </aside>
+        )}
+      </div>
     </div>
   );
 }

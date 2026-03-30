@@ -1,0 +1,20 @@
+{
+  "identities": [
+    {
+      "name": "mapper_admin",
+      "credentials": [
+        {
+          "accessKey": "mapper_access_key",
+          "secretKey": "mapper_secret_key_32chars_here"
+        }
+      ],
+      "actions": [
+        "Admin",
+        "Read",
+        "Write",
+        "List",
+        "Tagging"
+      ]
+    }
+  ]
+}

@@ -66,11 +66,11 @@ export default function HomePage() {
 
     const terrainNoise = (x: number, y: number) => {
       let val = 0, amp = 1, freq = 1, totalAmp = 0;
-      for (let o = 0; o < 5; o++) {
-        val += smoothNoise(x * freq * 0.008, y * freq * 0.008) * amp;
+      for (let o = 0; o < 4; o++) {
+        val += smoothNoise(x * freq * 0.002, y * freq * 0.002) * amp;
         totalAmp += amp;
-        amp *= 0.5;
-        freq *= 2.1;
+        amp *= 0.45;
+        freq *= 2.0;
       }
       return val / totalAmp;
     };
@@ -162,17 +162,16 @@ export default function HomePage() {
       ctx.fillStyle = bg;
       ctx.fillRect(0, 0, W, H);
 
-      // ═══ DENSE TOPOGRAPHIC CONTOURS ═══
-      // More levels = denser contour lines (like real topo maps)
-      const levels = 20;
+      // ═══ TOPOGRAPHIC CONTOURS (zoomed in — fewer, bigger) ═══
+      const levels = 8;
       for (let li = 1; li < levels; li++) {
         const threshold = li / levels;
-        const isMajor = li % 4 === 0;
+        const isMajor = li % 2 === 0;
 
         ctx.strokeStyle = isMajor
           ? 'rgba(160, 185, 220, 0.22)'
-          : 'rgba(140, 165, 200, 0.09)';
-        ctx.lineWidth = isMajor ? 1.0 : 0.5;
+          : 'rgba(140, 165, 200, 0.10)';
+        ctx.lineWidth = isMajor ? 1.1 : 0.6;
 
         ctx.beginPath();
 
@@ -366,7 +365,7 @@ export default function HomePage() {
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Exo+2:wght@300;400;500;600;700;800;900&family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Mono:wght@400;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Mono:wght@400;700&display=swap');
 
         @keyframes hp-fadeUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes hp-fadeIn { from { opacity: 0; } to { opacity: 1; } }
@@ -459,25 +458,15 @@ export default function HomePage() {
               animation: 'hp-fadeUp 900ms cubic-bezier(0,0,0.2,1) forwards', opacity: 0,
             }}>
 
-              {/* AKARA — Exo 2 Bold (Aria-style geometric) */}
+              {/* AKARA title — geometric futuristic */}
               <h1 style={{
-                fontSize: 96, fontWeight: 800, lineHeight: 1,
+                fontSize: 88, fontWeight: 700, lineHeight: 1,
                 letterSpacing: '0.2em',
-                fontFamily: "'Exo 2', sans-serif",
-                background: `linear-gradient(90deg,
-                  ${TEXT} ${Math.max(0, shimmerPos * 100 - 18)}%,
-                  ${BLUE_LIGHT} ${shimmerPos * 100 - 4}%,
-                  #fff ${shimmerPos * 100}%,
-                  ${BLUE_LIGHT} ${shimmerPos * 100 + 4}%,
-                  ${TEXT} ${Math.min(100, shimmerPos * 100 + 18)}%)`,
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                backgroundClip: 'text',
-                filter: `drop-shadow(0 4px 28px ${BLUE_GLOW})`,
+                fontFamily: "'Orbitron', sans-serif",
+                color: TEXT,
+                textShadow: `0 0 40px rgba(44, 123, 242, 0.4), 0 0 80px rgba(44, 123, 242, 0.15)`,
                 marginBottom: 10,
-              }}>
-                AKARA
-              </h1>
+              }}>AKARA</h1>
 
               {/* Tagline */}
               <p style={{
