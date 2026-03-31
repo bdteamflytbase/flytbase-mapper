@@ -46,7 +46,8 @@
   --ak-radius-lg:      14px;
 
   /* ── Font ── */
-  --ak-font:           'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --ak-font:           'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  --ak-font-display:   'DM Serif Display', Georgia, serif;
   --ak-font-mono:      'JetBrains Mono', 'SF Mono', monospace;
 
   /* ── Motion ── */

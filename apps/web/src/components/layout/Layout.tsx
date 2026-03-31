@@ -44,7 +44,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 4px' }}>
           <img src="/akara-logo.svg" alt="Akara" style={{ width: 30, height: 30 }} />
           <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.1 }}>
-            <span style={{ fontSize: 15, fontWeight: 400, color: 'var(--ak-text)', fontFamily: 'var(--ak-font-display)' }}>Akara</span>
+            <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--ak-text)', fontFamily: 'var(--ak-font)', letterSpacing: '-0.01em' }}>Akara</span>
             <span style={{ fontSize: 9, color: 'var(--ak-text-3)', letterSpacing: '0.02em' }}>by FlytBase</span>
           </div>
         </div>
