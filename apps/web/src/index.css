@@ -6,36 +6,39 @@
    Akara Design System — Cream/Warm Light Theme (Editor Layout)
    ═══════════════════════════════════════════════════════════════ */
 :root {
-  /* ── Backgrounds — warm cream tones ── */
-  --ak-bg:             #FAF9F7;
-  --ak-bg-page:        #F4F3F0;
-  --ak-bg-warm:        #F0EEEB;
-  --ak-surface:        #FFFFFF;
-  --ak-surface-hover:  #F8F7F5;
+  /* ── Backgrounds — warm cream ── */
+  --ak-bg:             #F5F2EC;
+  --ak-bg-page:        #EDEBE4;
+  --ak-bg-warm:        #E3E0D6;
+  --ak-surface:        #FDFCF8;
+  --ak-surface-hover:  #F3F1EA;
 
-  /* ── Brand ── */
-  --ak-primary:        #2C7BF2;
-  --ak-primary-hover:  #1A6AE0;
-  --ak-primary-subtle: rgba(44, 123, 242, 0.07);
+  /* ── Brand (sage green + golden amber) ── */
+  --ak-primary:        #4A6741;
+  --ak-primary-hover:  #3D5736;
+  --ak-primary-subtle: rgba(74, 103, 65, 0.09);
+  --ak-gradient-accent: linear-gradient(135deg, #4A6741 0%, #6B8A5E 100%);
+  --ak-accent:         #C4A34A;
+  --ak-accent-subtle:  rgba(196, 163, 74, 0.08);
 
-  /* ── Text ── */
-  --ak-text:           #1C1B19;
-  --ak-text-2:         #6E6B65;
-  --ak-text-3:         #A09D97;
+  /* ── Text — earthy ── */
+  --ak-text:           #2C3227;
+  --ak-text-2:         #6B7265;
+  --ak-text-3:         #A3A296;
 
-  /* ── Borders ── */
-  --ak-border:         rgba(0, 0, 0, 0.06);
-  --ak-border-hover:   rgba(0, 0, 0, 0.10);
-  --ak-border-active:  rgba(44, 123, 242, 0.25);
+  /* ── Borders — earthy ── */
+  --ak-border:         rgba(100, 95, 75, 0.10);
+  --ak-border-hover:   rgba(100, 95, 75, 0.16);
+  --ak-border-active:  rgba(74, 103, 65, 0.30);
 
   /* ── Status ── */
-  --ak-success:        #22C55E;
-  --ak-warning:        #F59E0B;
-  --ak-danger:         #EF4444;
+  --ak-success:        #4A6741;
+  --ak-warning:        #C4A34A;
+  --ak-danger:         #C2634E;
 
-  --ak-success-bg:     rgba(34, 197, 94, 0.07);
-  --ak-warning-bg:     rgba(245, 158, 11, 0.07);
-  --ak-danger-bg:      rgba(239, 68, 68, 0.07);
+  --ak-success-bg:     rgba(74, 103, 65, 0.07);
+  --ak-warning-bg:     rgba(196, 163, 74, 0.08);
+  --ak-danger-bg:      rgba(194, 99, 78, 0.07);
 
   /* ── Radius ── */
   --ak-radius:         10px;
@@ -49,11 +52,11 @@
   /* ── Motion ── */
   --ak-transition:     150ms ease;
 
-  /* ── Shadows ── */
-  --ak-shadow-xs:      0 1px 2px rgba(0, 0, 0, 0.04);
-  --ak-shadow-sm:      0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.03);
-  --ak-shadow-md:      0 4px 12px rgba(0, 0, 0, 0.06);
-  --ak-shadow-lg:      0 8px 24px rgba(0, 0, 0, 0.08);
+  /* ── Shadows — warm ── */
+  --ak-shadow-xs:      0 1px 2px rgba(60, 55, 40, 0.05);
+  --ak-shadow-sm:      0 1px 3px rgba(60, 55, 40, 0.06), 0 1px 2px rgba(60, 55, 40, 0.04);
+  --ak-shadow-md:      0 4px 12px rgba(60, 55, 40, 0.07);
+  --ak-shadow-lg:      0 8px 24px rgba(60, 55, 40, 0.09);
 
   /* ── Legacy compat ── */
   --fb-bg: var(--ak-bg-page); --fb-surface: var(--ak-surface); --fb-border: var(--ak-border);
@@ -69,15 +72,48 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
-  background: var(--ak-bg-page);
+  background: var(--ak-bg);
   color: var(--ak-text);
   font-family: var(--ak-font);
   height: 100vh;
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
+  position: relative;
 }
 
-#root { height: 100vh; display: flex; flex-direction: column; }
+/* Earthy diagonal gradient */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background: linear-gradient(315deg, rgba(100, 145, 115, 0.12) 0%, rgba(210, 190, 150, 0.08) 50%, rgba(200, 160, 80, 0.05) 100%);
+}
+
+#root { height: 100vh; display: flex; flex-direction: column; position: relative; z-index: 1; }
+
+/* Floating blobs */
+#root::before,
+#root::after {
+  content: '';
+  position: fixed;
+  pointer-events: none;
+  border-radius: 50%;
+  z-index: -1;
+}
+#root::before {
+  width: 500px; height: 500px;
+  bottom: -100px; left: -100px;
+  background: rgba(74, 103, 65, 0.06);
+  filter: blur(140px);
+}
+#root::after {
+  width: 400px; height: 400px;
+  top: -80px; right: -80px;
+  background: rgba(196, 163, 74, 0.05);
+  filter: blur(140px);
+}
 
 /* Grain overlay — modern texture */
 body::before {
@@ -86,7 +122,7 @@ body::before {
   inset: 0;
   pointer-events: none;
   z-index: 9999;
-  opacity: 0.08;
+  opacity: 0.12;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   background-repeat: repeat;
   background-size: 512px 512px;

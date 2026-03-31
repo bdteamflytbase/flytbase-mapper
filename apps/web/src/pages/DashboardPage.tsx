@@ -27,7 +27,7 @@ export default function DashboardPage() {
 
   return (
     <div style={{ flex: 1, overflowY: 'auto' }}>
-      <div style={{ padding: '36px 40px', maxWidth: 1200, margin: '0 auto' }}>
+      <div style={{ padding: '36px 40px' }}>
 
         {/* Header */}
         <div style={{ marginBottom: 32 }}>
@@ -84,7 +84,7 @@ function StatCard({ label, value, accent }: {
 }) {
   return (
     <div className="ak-animate-in" style={{
-      background: '#fff',
+      background: 'rgba(253, 252, 248, 0.85)',
       borderRadius: 12,
       padding: '20px 24px',
       boxShadow: 'var(--ak-shadow-xs)',
@@ -115,7 +115,7 @@ function SiteCard({ site, projectCount, isActive }: { site: any; projectCount: n
       <div
         className="ak-animate-in"
         style={{
-          background: '#fff',
+          background: 'rgba(253, 252, 248, 0.85)',
           borderRadius: 14,
           overflow: 'hidden',
           cursor: 'pointer',
@@ -137,7 +137,7 @@ function SiteCard({ site, projectCount, isActive }: { site: any; projectCount: n
           height: 180,
           background: thumbnail
             ? `url(${thumbnail}) center/cover no-repeat`
-            : 'linear-gradient(135deg, #EEF2F7 0%, #E2E8F0 100%)',
+            : 'linear-gradient(145deg, #E8E6DA 0%, #DDD9C8 100%)',
           position: 'relative',
         }}>
           {isActive && (
@@ -200,7 +200,7 @@ function EmptyState() {
     <div className="ak-animate-in" style={{
       display: 'flex', flexDirection: 'column', alignItems: 'center',
       justifyContent: 'center', height: 320,
-      background: '#fff', borderRadius: 14,
+      background: 'rgba(253, 252, 248, 0.85)', borderRadius: 14,
       border: '1px solid var(--ak-border)',
     }}>
       <div style={{

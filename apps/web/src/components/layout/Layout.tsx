@@ -24,12 +24,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const isProjectView = loc.pathname.includes('/projects/');
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: 'var(--ak-bg-page)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: 'transparent' }}>
 
       {/* ═══ TOP BAR ═══ */}
       <div style={{
         height: 48,
-        background: 'var(--ak-bg)',
+        background: 'rgba(253, 252, 248, 0.82)',
+        backdropFilter: 'blur(16px)',
+        WebkitBackdropFilter: 'blur(16px)',
         borderBottom: '1px solid var(--ak-border)',
         display: 'flex',
         alignItems: 'center',
@@ -39,20 +41,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         zIndex: 20,
       }}>
         {/* Logo */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 4px' }}>
-          <div style={{
-            width: 26, height: 26, borderRadius: 7,
-            background: 'var(--ak-primary)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
-            <Hexagon size={13} color="#fff" strokeWidth={2.5} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 4px' }}>
+          <img src="/akara-logo.svg" alt="Akara" style={{ width: 30, height: 30 }} />
+          <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.1 }}>
+            <span style={{ fontSize: 15, fontWeight: 400, color: 'var(--ak-text)', fontFamily: 'var(--ak-font-display)' }}>Akara</span>
+            <span style={{ fontSize: 9, color: 'var(--ak-text-3)', letterSpacing: '0.02em' }}>by FlytBase</span>
           </div>
-          <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--ak-text)', letterSpacing: '0.01em' }}>
-            Akara
-          </span>
-          <span style={{ fontSize: 10, color: 'var(--ak-text-3)', marginLeft: -4 }}>
-            by FlytBase
-          </span>
         </div>
 
         {/* Divider */}
@@ -145,7 +139,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           {/* Avatar */}
           <div style={{
             width: 28, height: 28, borderRadius: 7,
-            background: 'linear-gradient(135deg, var(--ak-primary), #60A5FA)',
+            background: 'linear-gradient(135deg, #4A6741, #C4A34A)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             color: '#fff', fontSize: 11, fontWeight: 700, marginLeft: 4,
           }}>
@@ -161,7 +155,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         {leftOpen && (
           <aside style={{
             width: 240,
-            background: 'var(--ak-bg)',
+            background: 'rgba(247, 246, 240, 0.65)',
+            backdropFilter: 'blur(16px)',
+            WebkitBackdropFilter: 'blur(16px)',
             borderRight: '1px solid var(--ak-border)',
             display: 'flex',
             flexDirection: 'column',
@@ -237,7 +233,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <main style={{
           flex: 1, overflow: 'hidden', minWidth: 0,
           display: 'flex', flexDirection: 'column',
-          background: 'var(--ak-bg)',
+          background: 'transparent',
         }}>
           {children}
         </main>
@@ -246,7 +242,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         {isProjectView && rightOpen && (
           <aside style={{
             width: 280,
-            background: 'var(--ak-bg)',
+            background: 'rgba(247, 246, 240, 0.65)',
+            backdropFilter: 'blur(16px)',
+            WebkitBackdropFilter: 'blur(16px)',
             borderLeft: '1px solid var(--ak-border)',
             display: 'flex',
             flexDirection: 'column',

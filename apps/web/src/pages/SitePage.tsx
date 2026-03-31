@@ -57,7 +57,7 @@ export default function SitePage() {
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={() => setShowCustom(true)} style={{
               display: 'flex', alignItems: 'center', gap: 6,
-              background: '#fff', color: 'var(--ak-text-2)',
+              background: 'rgba(253, 252, 248, 0.85)', color: 'var(--ak-text-2)',
               border: '1px solid var(--ak-border)', borderRadius: 8,
               padding: '8px 16px', fontSize: 13, fontWeight: 500, cursor: 'pointer',
               transition: 'all 150ms',
@@ -72,7 +72,7 @@ export default function SitePage() {
               background: 'var(--ak-primary)', color: '#fff',
               border: 'none', borderRadius: 8,
               padding: '8px 18px', fontSize: 13, fontWeight: 600, cursor: 'pointer',
-              transition: 'all 150ms', boxShadow: '0 1px 3px rgba(44,123,242,0.2)',
+              transition: 'all 150ms', boxShadow: '0 1px 3px rgba(74,103,65,0.2)',
             }}
               onMouseEnter={e => { e.currentTarget.style.background = 'var(--ak-primary-hover)'; }}
               onMouseLeave={e => { e.currentTarget.style.background = 'var(--ak-primary)'; }}
@@ -93,8 +93,8 @@ export default function SitePage() {
               <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--ak-primary)' }}>Processing</span>
               <span style={{ fontSize: 12, color: 'var(--ak-text-3)', fontFamily: 'var(--ak-font-mono)' }}>{currentJob.progress || 0}%</span>
             </div>
-            <div style={{ height: 4, borderRadius: 2, background: 'rgba(44,123,242,0.12)', overflow: 'hidden' }}>
-              <div style={{ height: '100%', borderRadius: 2, background: 'var(--ak-primary)', width: `${currentJob.progress || 0}%`, transition: 'width 400ms' }} />
+            <div style={{ height: 4, borderRadius: 2, background: 'rgba(74,103,65,0.12)', overflow: 'hidden' }}>
+              <div style={{ height: '100%', borderRadius: 2, background: '#4A6741', width: `${currentJob.progress || 0}%`, transition: 'width 400ms' }} />
             </div>
           </div>
         )}
@@ -108,7 +108,7 @@ export default function SitePage() {
           <div className="ak-animate-in" style={{
             display: 'flex', flexDirection: 'column', alignItems: 'center',
             justifyContent: 'center', height: 240,
-            background: '#fff', borderRadius: 14, border: '1px solid var(--ak-border)',
+            background: 'rgba(253, 252, 248, 0.85)', borderRadius: 14, border: '1px solid var(--ak-border)',
           }}>
             <FolderOpen size={24} color="var(--ak-text-3)" style={{ marginBottom: 12 }} />
             <p style={{ fontSize: 14, color: 'var(--ak-text)', marginBottom: 4, fontWeight: 500 }}>No projects yet</p>
@@ -142,7 +142,7 @@ export default function SitePage() {
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
           <div className="ak-animate-scale" style={{
-            background: '#fff', borderRadius: 16, width: '100%', maxWidth: 420,
+            background: 'rgba(253, 252, 248, 0.85)', borderRadius: 16, width: '100%', maxWidth: 420,
             padding: '28px', boxShadow: 'var(--ak-shadow-xl)',
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
@@ -207,7 +207,7 @@ function ProjectRow({ project: p, siteId, runningJobs, onDelete }: {
   return (
     <div className="ak-animate-in" style={{
       display: 'flex', alignItems: 'center', gap: 14,
-      padding: '12px 16px', background: '#fff',
+      padding: '12px 16px', background: 'rgba(253, 252, 248, 0.85)',
       border: '1px solid var(--ak-border)', borderRadius: 10,
       transition: 'all 150ms', cursor: 'pointer',
     }}
@@ -217,7 +217,7 @@ function ProjectRow({ project: p, siteId, runningJobs, onDelete }: {
       <Link to={`/sites/${siteId}/projects/${p._id}`} style={{ flexShrink: 0 }}>
         <div style={{
           width: 44, height: 44, borderRadius: 10, overflow: 'hidden',
-          background: p.thumbnail_url ? `url(${p.thumbnail_url}) center/cover` : 'linear-gradient(135deg, #EEF2F7, #E2E8F0)',
+          background: p.thumbnail_url ? `url(${p.thumbnail_url}) center/cover` : 'linear-gradient(145deg, #E8E6DA, #DDD9C8)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
           {!p.thumbnail_url && <FolderOpen size={16} color="#C4CDD5" />}

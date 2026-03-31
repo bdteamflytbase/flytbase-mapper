@@ -66,7 +66,9 @@ export default function ProjectPage() {
         display: 'flex', alignItems: 'center', gap: 10,
         padding: '10px 16px',
         borderBottom: '1px solid var(--ak-border)',
-        background: 'var(--ak-bg)',
+        background: 'rgba(247, 246, 240, 0.8)',
+        backdropFilter: 'blur(16px)',
+        WebkitBackdropFilter: 'blur(16px)',
         flexShrink: 0,
       }}>
         <Link to={`/sites/${siteId}`} style={{
@@ -147,7 +149,7 @@ export default function ProjectPage() {
                 borderRadius: 14, padding: '28px 36px', textAlign: 'center',
                 minWidth: 300,
               }}>
-                <Loader size={28} color="var(--ak-primary)" style={{ animation: 'spin 1.5s linear infinite', marginBottom: 16 }} />
+                <Loader size={28} color="#4A6741" style={{ animation: 'spin 1.5s linear infinite', marginBottom: 16 }} />
                 <div style={{ fontSize: 15, fontWeight: 600, color: '#eee', marginBottom: 6 }}>
                   Processing
                 </div>
@@ -157,7 +159,7 @@ export default function ProjectPage() {
                 <div style={{ height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.06)', overflow: 'hidden', marginBottom: 8 }}>
                   <div style={{
                     height: '100%', borderRadius: 2,
-                    background: 'var(--ak-primary)',
+                    background: 'linear-gradient(90deg, #4A6741, #6B8A5E)',
                     width: `${runningJob.progress || 0}%`,
                     transition: 'width 500ms ease',
                   }} />
@@ -190,9 +192,9 @@ export default function ProjectPage() {
                 position: 'absolute', top: 12, left: 12, zIndex: 10,
                 display: 'flex', alignItems: 'center', gap: 5,
                 padding: '6px 12px',
-                background: showTrajectory ? 'rgba(44,123,242,0.9)' : 'rgba(255,255,255,0.9)',
+                background: showTrajectory ? 'rgba(74,103,65,0.9)' : 'rgba(255,255,255,0.9)',
                 backdropFilter: 'blur(8px)',
-                border: '1px solid ' + (showTrajectory ? 'rgba(44,123,242,0.3)' : 'rgba(0,0,0,0.06)'),
+                border: '1px solid ' + (showTrajectory ? 'rgba(74,103,65,0.3)' : 'rgba(100,95,75,0.10)'),
                 borderRadius: 7,
                 color: showTrajectory ? '#fff' : 'var(--ak-text-2)',
                 fontSize: 11, fontWeight: 500, cursor: 'pointer',
