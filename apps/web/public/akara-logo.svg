@@ -13,7 +13,7 @@
   <path d="M18 130 L38 114 L52 118 L66 98 L76 78 L80 28 L84 78 L94 98 L108 118 L122 114 L142 130"
         stroke="#4A6741" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
   <!-- Survey crossbar -->
-  <line x1="58" y1="106" x2="102" y2="106" stroke="#C4A34A" stroke-width="1.8" stroke-dasharray="5 4"/>
+  <line x1="62" y1="106" x2="106" y2="106" stroke="#C4A34A" stroke-width="1.8" stroke-dasharray="5 4"/>
   <!-- Summit marker -->
   <circle cx="80" cy="24" r="6" stroke="#4A6741" stroke-width="2.5" fill="none"/>
   <circle cx="80" cy="24" r="2" fill="#4A6741"/>
