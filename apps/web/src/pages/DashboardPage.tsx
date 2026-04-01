@@ -42,13 +42,6 @@ export default function DashboardPage() {
           </p>
         </div>
 
-        {/* Stats — clean, minimal */}
-        <div className="ak-stagger" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 40 }}>
-          <StatCard label="Total sites" value={sites.length} />
-          <StatCard label="Active projects" value={totalProjects} />
-          <StatCard label="Processing" value={processingCount} accent />
-        </div>
-
         {/* Site cards */}
         {sites.length === 0 ? (
           <EmptyState />

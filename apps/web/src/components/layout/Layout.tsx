@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
   Map, BarChart3, HelpCircle, Settings, ChevronLeft, ChevronRight,
-  Hexagon, Layers, Eye, Sliders, Ruler, Download, Image, Mountain, Box
+  Hexagon, Layers, Eye, Sliders, Ruler, Download, Image, Mountain, Box,
+  LogOut, User, Moon, Sun, Monitor, PanelLeftClose, PanelLeftOpen
 } from 'lucide-react';
 
 const NAV_ITEMS = [
@@ -14,14 +15,28 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const loc = useLocation();
   const [leftOpen, setLeftOpen] = useState(true);
   const [rightOpen, setRightOpen] = useState(true);
+  const [avatarOpen, setAvatarOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [theme, setTheme] = useState<'light' | 'dark' | 'system'>('light');
+  const avatarRef = useRef<HTMLDivElement>(null);
+  const settingsRef = useRef<HTMLDivElement>(null);
 
   const isActive = (to: string) => {
     if (to === '/dashboard') return loc.pathname === '/dashboard';
     return loc.pathname.startsWith(to);
   };
 
-  // Check if we're on a project page (show right panel)
   const isProjectView = loc.pathname.includes('/projects/');
+
+  // Close dropdowns on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (avatarRef.current && !avatarRef.current.contains(e.target as Node)) setAvatarOpen(false);
+      if (settingsRef.current && !settingsRef.current.contains(e.target as Node)) setSettingsOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: 'transparent' }}>
@@ -52,46 +67,22 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         {/* Divider */}
         <div style={{ width: 1, height: 20, background: 'var(--ak-border)', margin: '0 4px' }} />
 
-        {/* Left panel toggle */}
+        {/* Sidebar toggle */}
         <button
           onClick={() => setLeftOpen(v => !v)}
           style={{
-            background: leftOpen ? 'var(--ak-bg-warm)' : 'transparent',
+            background: 'transparent',
             border: 'none', borderRadius: 6, cursor: 'pointer',
-            color: leftOpen ? 'var(--ak-text)' : 'var(--ak-text-3)',
-            padding: '5px 8px', display: 'flex', alignItems: 'center', gap: 4,
-            fontSize: 11, fontWeight: 500, transition: 'all 120ms',
+            color: 'var(--ak-text-3)',
+            padding: 6, display: 'flex', alignItems: 'center',
+            transition: 'all 120ms',
           }}
-          onMouseEnter={e => { if (!leftOpen) e.currentTarget.style.background = 'var(--ak-bg-warm)'; }}
-          onMouseLeave={e => { if (!leftOpen) e.currentTarget.style.background = 'transparent'; }}
-          title={leftOpen ? 'Hide sidebar' : 'Show sidebar'}
+          onMouseEnter={e => { e.currentTarget.style.background = 'var(--ak-bg-warm)'; e.currentTarget.style.color = 'var(--ak-text)'; }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--ak-text-3)'; }}
+          title={leftOpen ? 'Collapse sidebar' : 'Expand sidebar'}
         >
-          <Layers size={13} />
-          <span>Panels</span>
+          {leftOpen ? <PanelLeftClose size={16} /> : <PanelLeftOpen size={16} />}
         </button>
-
-        {/* Nav links */}
-        <div style={{ display: 'flex', gap: 2, marginLeft: 4 }}>
-          {NAV_ITEMS.map(({ to, icon: Icon, label }) => {
-            const active = isActive(to);
-            return (
-              <Link key={to} to={to} style={{
-                display: 'flex', alignItems: 'center', gap: 5,
-                padding: '5px 10px', borderRadius: 6,
-                background: active ? 'var(--ak-primary-subtle)' : 'transparent',
-                color: active ? 'var(--ak-primary)' : 'var(--ak-text-2)',
-                fontSize: 12, fontWeight: active ? 600 : 500,
-                textDecoration: 'none', transition: 'all 120ms',
-              }}
-                onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--ak-bg-warm)'; }}
-                onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent'; }}
-              >
-                <Icon size={13} />
-                {label}
-              </Link>
-            );
-          })}
-        </div>
 
         {/* Spacer */}
         <div style={{ flex: 1 }} />
@@ -125,25 +116,191 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           >
             <HelpCircle size={15} />
           </button>
-          <button style={{
-            background: 'transparent', border: 'none', borderRadius: 6,
-            cursor: 'pointer', color: 'var(--ak-text-3)', padding: 6,
-            display: 'flex', transition: 'all 120ms',
-          }}
-            onMouseEnter={e => { e.currentTarget.style.background = 'var(--ak-bg-warm)'; e.currentTarget.style.color = 'var(--ak-text)'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--ak-text-3)'; }}
-          >
-            <Settings size={15} />
-          </button>
 
-          {/* Avatar */}
-          <div style={{
-            width: 28, height: 28, borderRadius: 7,
-            background: 'linear-gradient(135deg, #4A6741, #C4A34A)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: '#fff', fontSize: 11, fontWeight: 700, marginLeft: 4,
-          }}>
-            DG
+          {/* Settings button + dropdown */}
+          <div ref={settingsRef} style={{ position: 'relative' }}>
+            <button
+              onClick={() => { setSettingsOpen(v => !v); setAvatarOpen(false); }}
+              style={{
+                background: settingsOpen ? 'var(--ak-bg-warm)' : 'transparent',
+                border: 'none', borderRadius: 6,
+                cursor: 'pointer', color: settingsOpen ? 'var(--ak-text)' : 'var(--ak-text-3)',
+                padding: 6, display: 'flex', transition: 'all 120ms',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'var(--ak-bg-warm)'; e.currentTarget.style.color = 'var(--ak-text)'; }}
+              onMouseLeave={e => { if (!settingsOpen) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--ak-text-3)'; } }}
+            >
+              <Settings size={15} />
+            </button>
+
+            {/* Settings dropdown */}
+            {settingsOpen && (
+              <div style={{
+                position: 'absolute', top: 'calc(100% + 8px)', right: 0,
+                width: 220,
+                background: 'var(--ak-surface, #FDFCF8)',
+                border: '1px solid var(--ak-border)',
+                borderRadius: 12,
+                boxShadow: '0 8px 32px rgba(60, 55, 40, 0.12)',
+                padding: '8px',
+                zIndex: 100,
+                animation: 'ak-dropdown-in 150ms ease',
+              }}>
+                <div style={{ padding: '8px 10px', fontSize: 10, fontWeight: 700, color: 'var(--ak-text-3)', letterSpacing: '0.08em' }}>
+                  APPEARANCE
+                </div>
+
+                {/* Theme selector */}
+                <div style={{
+                  display: 'flex', gap: 4,
+                  padding: '4px 6px', marginBottom: 4,
+                }}>
+                  {([
+                    { value: 'light' as const, icon: Sun, label: 'Light' },
+                    { value: 'dark' as const, icon: Moon, label: 'Dark' },
+                    { value: 'system' as const, icon: Monitor, label: 'System' },
+                  ]).map(({ value, icon: Icon, label }) => (
+                    <button
+                      key={value}
+                      onClick={() => setTheme(value)}
+                      style={{
+                        flex: 1,
+                        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
+                        padding: '8px 4px',
+                        borderRadius: 8,
+                        border: theme === value ? '1.5px solid var(--ak-primary)' : '1px solid var(--ak-border)',
+                        background: theme === value ? 'var(--ak-primary-subtle)' : 'transparent',
+                        color: theme === value ? 'var(--ak-primary)' : 'var(--ak-text-3)',
+                        cursor: 'pointer',
+                        fontSize: 10, fontWeight: 500,
+                        fontFamily: 'var(--ak-font, Inter, sans-serif)',
+                        transition: 'all 120ms',
+                      }}
+                    >
+                      <Icon size={14} />
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                <div style={{ height: 1, background: 'var(--ak-border)', margin: '4px 0' }} />
+
+                <div style={{ padding: '8px 10px', fontSize: 10, fontWeight: 700, color: 'var(--ak-text-3)', letterSpacing: '0.08em' }}>
+                  GENERAL
+                </div>
+                {[
+                  { label: 'Notifications', desc: 'Email & push alerts' },
+                  { label: 'Language', desc: 'English (US)' },
+                ].map(item => (
+                  <div
+                    key={item.label}
+                    style={{
+                      padding: '8px 10px', borderRadius: 7,
+                      cursor: 'pointer', transition: 'background 100ms',
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'var(--ak-surface-hover, #F3F1EA)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                  >
+                    <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ak-text)' }}>{item.label}</div>
+                    <div style={{ fontSize: 11, color: 'var(--ak-text-3)', marginTop: 1 }}>{item.desc}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Avatar + dropdown */}
+          <div ref={avatarRef} style={{ position: 'relative', marginLeft: 4 }}>
+            <div
+              onClick={() => { setAvatarOpen(v => !v); setSettingsOpen(false); }}
+              style={{
+                width: 28, height: 28, borderRadius: 7,
+                background: 'linear-gradient(135deg, #4A6741, #C4A34A)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: '#fff', fontSize: 11, fontWeight: 700,
+                cursor: 'pointer',
+                boxShadow: avatarOpen ? '0 0 0 2px var(--ak-primary)' : 'none',
+                transition: 'box-shadow 120ms',
+              }}
+            >
+              DG
+            </div>
+
+            {/* Avatar dropdown */}
+            {avatarOpen && (
+              <div style={{
+                position: 'absolute', top: 'calc(100% + 8px)', right: 0,
+                width: 220,
+                background: 'var(--ak-surface, #FDFCF8)',
+                border: '1px solid var(--ak-border)',
+                borderRadius: 12,
+                boxShadow: '0 8px 32px rgba(60, 55, 40, 0.12)',
+                padding: '8px',
+                zIndex: 100,
+                animation: 'ak-dropdown-in 150ms ease',
+              }}>
+                {/* User info */}
+                <div style={{
+                  padding: '10px 10px 12px',
+                  borderBottom: '1px solid var(--ak-border)',
+                  marginBottom: 4,
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{
+                      width: 36, height: 36, borderRadius: 9,
+                      background: 'linear-gradient(135deg, #4A6741, #C4A34A)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      color: '#fff', fontSize: 13, fontWeight: 700,
+                    }}>
+                      DG
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ak-text)' }}>Deep Gupta</div>
+                      <div style={{ fontSize: 11, color: 'var(--ak-text-3)' }}>deep@flytbase.com</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Menu items */}
+                {[
+                  { icon: User, label: 'Account Settings', desc: 'Profile, email, password' },
+                  { icon: Settings, label: 'Change Display Name', desc: 'Currently: Deep Gupta' },
+                ].map(item => (
+                  <div
+                    key={item.label}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 10,
+                      padding: '8px 10px', borderRadius: 7,
+                      cursor: 'pointer', transition: 'background 100ms',
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'var(--ak-surface-hover, #F3F1EA)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                  >
+                    <item.icon size={15} color="var(--ak-text-2)" />
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ak-text)' }}>{item.label}</div>
+                      <div style={{ fontSize: 11, color: 'var(--ak-text-3)', marginTop: 1 }}>{item.desc}</div>
+                    </div>
+                  </div>
+                ))}
+
+                <div style={{ height: 1, background: 'var(--ak-border)', margin: '4px 0' }} />
+
+                {/* Log out */}
+                <div
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '8px 10px', borderRadius: 7,
+                    cursor: 'pointer', transition: 'background 100ms',
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(194, 99, 78, 0.06)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                >
+                  <LogOut size={15} color="var(--ak-danger, #C2634E)" />
+                  <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--ak-danger, #C2634E)' }}>Log Out</span>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -151,89 +308,72 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       {/* ═══ BODY: Left Panel + Canvas + Right Panel ═══ */}
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
 
-        {/* Left Panel — project tree / navigation */}
-        {leftOpen && (
-          <aside style={{
-            width: 240,
-            background: 'rgba(247, 246, 240, 0.65)',
-            backdropFilter: 'blur(16px)',
-            WebkitBackdropFilter: 'blur(16px)',
-            borderRight: '1px solid var(--ak-border)',
-            display: 'flex',
-            flexDirection: 'column',
-            overflow: 'hidden',
-            flexShrink: 0,
+        {/* Left Panel — collapsible sidebar */}
+        <aside style={{
+          width: leftOpen ? 240 : 0,
+          minWidth: leftOpen ? 240 : 0,
+          background: 'rgba(247, 246, 240, 0.65)',
+          backdropFilter: 'blur(16px)',
+          WebkitBackdropFilter: 'blur(16px)',
+          borderRight: leftOpen ? '1px solid var(--ak-border)' : 'none',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+          flexShrink: 0,
+          transition: 'width 200ms ease, min-width 200ms ease, border-right 200ms ease',
+        }}>
+          {/* Panel header */}
+          <div style={{
+            padding: '12px 14px',
+            borderBottom: '1px solid var(--ak-border)',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            whiteSpace: 'nowrap',
           }}>
-            {/* Panel header */}
-            <div style={{
-              padding: '12px 14px',
-              borderBottom: '1px solid var(--ak-border)',
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            }}>
-              <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--ak-text-2)', letterSpacing: '0.04em' }}>
-                EXPLORER
-              </span>
-            </div>
+            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--ak-text-2)', letterSpacing: '0.04em' }}>
+              EXPLORER
+            </span>
+          </div>
 
-            {/* Nav items with tree-style */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: '8px 8px' }}>
-              {NAV_ITEMS.map(({ to, icon: Icon, label }) => {
-                const active = isActive(to);
-                return (
-                  <Link key={to} to={to} style={{
-                    display: 'flex', alignItems: 'center', gap: 8,
-                    padding: '8px 10px', borderRadius: 7, marginBottom: 2,
-                    background: active ? 'var(--ak-primary-subtle)' : 'transparent',
-                    color: active ? 'var(--ak-primary)' : 'var(--ak-text-2)',
-                    fontSize: 13, fontWeight: active ? 600 : 400,
-                    textDecoration: 'none', transition: 'all 100ms',
-                  }}
-                    onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--ak-surface-hover)'; }}
-                    onMouseLeave={e => { if (!active) e.currentTarget.style.background = active ? 'var(--ak-primary-subtle)' : 'transparent'; }}
-                  >
-                    <Icon size={15} strokeWidth={active ? 2 : 1.5} />
-                    {label}
-                  </Link>
-                );
-              })}
+          {/* Nav items */}
+          <div style={{ flex: 1, overflowY: 'auto', padding: '8px 8px', whiteSpace: 'nowrap' }}>
+            {NAV_ITEMS.map(({ to, icon: Icon, label }) => {
+              const active = isActive(to);
+              return (
+                <Link key={to} to={to} style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  padding: '8px 10px', borderRadius: 7, marginBottom: 2,
+                  background: active ? 'var(--ak-primary-subtle)' : 'transparent',
+                  color: active ? 'var(--ak-primary)' : 'var(--ak-text-2)',
+                  fontSize: 13, fontWeight: active ? 600 : 400,
+                  textDecoration: 'none', transition: 'all 100ms',
+                }}
+                  onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--ak-surface-hover)'; }}
+                  onMouseLeave={e => { if (!active) e.currentTarget.style.background = active ? 'var(--ak-primary-subtle)' : 'transparent'; }}
+                >
+                  <Icon size={15} strokeWidth={active ? 2 : 1.5} />
+                  {label}
+                </Link>
+              );
+            })}
+          </div>
 
-              {/* Quick info */}
-              <div style={{
-                marginTop: 16, padding: '12px',
-                background: 'var(--ak-bg-page)', borderRadius: 8,
-              }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--ak-text-2)', marginBottom: 6 }}>Quick Stats</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  {[
-                    { label: 'Sites', value: '2' },
-                    { label: 'Projects', value: '2' },
-                    { label: 'Processed', value: '1' },
-                  ].map(s => (
-                    <div key={s.label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-                      <span style={{ color: 'var(--ak-text-3)' }}>{s.label}</span>
-                      <span style={{ color: 'var(--ak-text)', fontWeight: 500 }}>{s.value}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Bottom */}
-            <div style={{
-              padding: '10px 12px', borderTop: '1px solid var(--ak-border)',
-              display: 'flex', alignItems: 'center', gap: 6,
-            }}>
-              <HelpCircle size={13} color="var(--ak-text-3)" />
-              <span style={{ fontSize: 11, color: 'var(--ak-text-3)' }}>Help & Resources</span>
-            </div>
-          </aside>
-        )}
+          {/* Bottom */}
+          <div style={{
+            padding: '10px 12px', borderTop: '1px solid var(--ak-border)',
+            display: 'flex', alignItems: 'center', gap: 6,
+            whiteSpace: 'nowrap',
+          }}>
+            <HelpCircle size={13} color="var(--ak-text-3)" />
+            <span style={{ fontSize: 11, color: 'var(--ak-text-3)' }}>Help & Resources</span>
+          </div>
+        </aside>
 
         {/* Center Canvas — main content */}
         <main style={{
           flex: 1, overflow: 'hidden', minWidth: 0,
           display: 'flex', flexDirection: 'column',
           background: 'transparent',
+          transition: 'margin 200ms ease',
         }}>
           {children}
         </main>
@@ -344,6 +484,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </aside>
         )}
       </div>
+
+      {/* Dropdown animation */}
+      <style>{`
+        @keyframes ak-dropdown-in {
+          from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+          to   { opacity: 1; transform: translateY(0) scale(1); }
+        }
+      `}</style>
     </div>
   );
 }
