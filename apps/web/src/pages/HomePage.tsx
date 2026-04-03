@@ -2,17 +2,20 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 /* ═══════════════════════════════════════════════════════════════
-   AKARA — Homepage v6
-   Dense organic topo contours + Aria-style bold font
+   AKARA — Homepage v7 (Earthy Design System)
+   Dense organic topo contours + drone grid mission
+   Sage green / golden amber on forest dark
    ═══════════════════════════════════════════════════════════════ */
 
-const BLUE = '#2C7BF2';
-const BLUE_LIGHT = '#60A5FA';
-const BLUE_GLOW = 'rgba(44, 123, 242, 0.45)';
-const BG = '#0d1628';
-const TEXT = '#F0F2F5';
-const TEXT2 = '#9AABC0';
-const TEXT3 = '#546480';
+const SAGE = '#4A6741';
+const SAGE_LIGHT = '#6B8A5E';
+const SAGE_GLOW = 'rgba(74, 103, 65, 0.30)';
+const AMBER = '#C4A34A';
+const AMBER_LIGHT = '#D4B86A';
+const BG = '#F0EDE4';
+const TEXT = '#2C3227';
+const TEXT2 = '#6B7265';
+const TEXT3 = '#A3A296';
 
 const HUD_CARDS = [
   { label: 'ACTIVE SITES', value: '12', unit: '', x: 3, y: 18 },
@@ -30,6 +33,11 @@ export default function HomePage() {
   const [showHUD, setShowHUD] = useState(false);
   const [progress, setProgress] = useState(0);
   const [shimmerPos, setShimmerPos] = useState(0.5);
+  const [showWaitlist, setShowWaitlist] = useState(false);
+  const [email, setEmail] = useState('');
+  const [orgName, setOrgName] = useState('');
+  const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     const t1 = setTimeout(() => setShowContent(true), 200);
@@ -149,29 +157,30 @@ export default function HomePage() {
         prevH.v = H;
       }
 
-      // Background
+      // Background — forest dark
       ctx.fillStyle = BG;
       ctx.fillRect(0, 0, W, H);
 
-      // Center glow
+      // Center glow — warm sage on cream
       const bg = ctx.createRadialGradient(W * 0.5, H * 0.46, 0, W * 0.5, H * 0.46, W * 0.65);
-      bg.addColorStop(0, 'rgba(28, 50, 82, 0.85)');
-      bg.addColorStop(0.35, 'rgba(20, 38, 65, 0.5)');
-      bg.addColorStop(0.7, 'rgba(14, 26, 48, 0.2)');
+      bg.addColorStop(0, 'rgba(74, 103, 65, 0.06)');
+      bg.addColorStop(0.25, 'rgba(74, 103, 65, 0.03)');
+      bg.addColorStop(0.5, 'rgba(196, 163, 74, 0.03)');
+      bg.addColorStop(0.75, 'rgba(196, 163, 74, 0.01)');
       bg.addColorStop(1, 'transparent');
       ctx.fillStyle = bg;
       ctx.fillRect(0, 0, W, H);
 
-      // ═══ TOPOGRAPHIC CONTOURS (zoomed in — fewer, bigger) ═══
+      // ═══ TOPOGRAPHIC CONTOURS ═══
       const levels = 8;
       for (let li = 1; li < levels; li++) {
         const threshold = li / levels;
         const isMajor = li % 2 === 0;
 
         ctx.strokeStyle = isMajor
-          ? 'rgba(160, 185, 220, 0.22)'
-          : 'rgba(140, 165, 200, 0.10)';
-        ctx.lineWidth = isMajor ? 1.1 : 0.6;
+          ? 'rgba(74, 103, 65, 0.45)'
+          : 'rgba(74, 103, 65, 0.30)';
+        ctx.lineWidth = isMajor ? 1.4 : 0.7;
 
         ctx.beginPath();
 
@@ -216,15 +225,15 @@ export default function HomePage() {
 
         // Elevation labels on major contours
         if (isMajor) {
-          ctx.font = '500 7px "Space Mono", monospace';
-          ctx.fillStyle = 'rgba(140, 165, 200, 0.18)';
+          ctx.font = '500 7px "JetBrains Mono", "Space Mono", monospace';
+          ctx.fillStyle = 'rgba(196, 163, 74, 0.25)';
           const elev = Math.round(threshold * 850);
           ctx.fillText(`${elev}m`, 80 + li * 55, H * 0.35 + (li % 3) * 40);
         }
       }
 
       // Subtle grid
-      ctx.strokeStyle = 'rgba(100, 130, 170, 0.03)';
+      ctx.strokeStyle = 'rgba(74, 103, 65, 0.04)';
       ctx.lineWidth = 0.5;
       for (let x = 0; x < W; x += 70) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
       for (let y = 0; y < H; y += 70) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
@@ -241,18 +250,18 @@ export default function HomePage() {
       const bx2 = (1 - gridPad) * W, by2 = (1 - gridPad) * H - 30;
       const rH = (by2 - by1) / gridRows;
 
-      ctx.setLineDash([3, 8]);
-      ctx.strokeStyle = 'rgba(44, 123, 242, 0.05)';
-      ctx.lineWidth = 0.5;
+      ctx.setLineDash([2, 10]);
+      ctx.strokeStyle = 'rgba(74, 103, 65, 0.025)';
+      ctx.lineWidth = 0.3;
       for (let r = 0; r <= gridRows; r++) {
         ctx.beginPath(); ctx.moveTo(bx1, by1 + r * rH); ctx.lineTo(bx2, by1 + r * rH); ctx.stroke();
       }
       ctx.setLineDash([]);
 
-      // Corner markers
+      // Corner markers — amber
       const cs = 16;
-      ctx.strokeStyle = 'rgba(44, 123, 242, 0.18)';
-      ctx.lineWidth = 1.2;
+      ctx.strokeStyle = 'rgba(196, 163, 74, 0.10)';
+      ctx.lineWidth = 1;
       [[bx1, by1, 1, 1], [bx2, by1, -1, 1], [bx1, by2, 1, -1], [bx2, by2, -1, -1]].forEach(([cx, cy, sx, sy]) => {
         ctx.beginPath();
         ctx.moveTo(cx as number, (cy as number) + (sy as number) * cs);
@@ -261,7 +270,7 @@ export default function HomePage() {
         ctx.stroke();
       });
 
-      // Trail
+      // Trail — sage green
       const total = pathLen(path);
       let acc = 0;
       ctx.beginPath();
@@ -277,30 +286,14 @@ export default function HomePage() {
         }
         acc += seg;
       }
-      ctx.strokeStyle = 'rgba(44, 123, 242, 0.06)'; ctx.lineWidth = 8; ctx.stroke();
-      ctx.strokeStyle = 'rgba(44, 123, 242, 0.18)'; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.strokeStyle = 'rgba(74, 103, 65, 0.05)'; ctx.lineWidth = 4; ctx.stroke();
+      ctx.strokeStyle = 'rgba(74, 103, 65, 0.15)'; ctx.lineWidth = 1; ctx.stroke();
 
-      // Image dots
-      if (time - lastDot > 0.006) { dots.push({ x: drone.x, y: drone.y, b: time }); lastDot = time; }
-      while (dots.length > 600) dots.shift();
-      dots.forEach(d => {
-        const age = time - d.b, a = Math.max(0, 0.5 - age * 0.25);
-        if (a <= 0) return;
-        ctx.fillStyle = `rgba(44, 123, 242, ${a * 0.35})`;
-        ctx.fillRect(d.x - 2.5, d.y - 2.5, 5, 5);
-        if (age < 0.08) {
-          const g = ctx.createRadialGradient(d.x, d.y, 0, d.x, d.y, 14);
-          g.addColorStop(0, `rgba(96, 165, 250, ${0.2 * (1 - age * 12)})`);
-          g.addColorStop(1, 'rgba(96, 165, 250, 0)');
-          ctx.beginPath(); ctx.arc(d.x, d.y, 14, 0, Math.PI * 2); ctx.fillStyle = g; ctx.fill();
-        }
-      });
-
-      // ═══ QUADCOPTER ═══
+      // ═══ QUADCOPTER — earthy light ═══
       const dg = ctx.createRadialGradient(drone.x, drone.y, 0, drone.x, drone.y, 45);
-      dg.addColorStop(0, 'rgba(44, 123, 242, 0.22)');
-      dg.addColorStop(0.5, 'rgba(44, 123, 242, 0.06)');
-      dg.addColorStop(1, 'rgba(44, 123, 242, 0)');
+      dg.addColorStop(0, 'rgba(74, 103, 65, 0.12)');
+      dg.addColorStop(0.5, 'rgba(74, 103, 65, 0.04)');
+      dg.addColorStop(1, 'rgba(74, 103, 65, 0)');
       ctx.beginPath(); ctx.arc(drone.x, drone.y, 45, 0, Math.PI * 2); ctx.fillStyle = dg; ctx.fill();
 
       ctx.save();
@@ -309,34 +302,34 @@ export default function HomePage() {
       [Math.PI * 0.25, Math.PI * 0.75, Math.PI * 1.25, Math.PI * 1.75].forEach(angle => {
         const ax = Math.cos(angle) * armLen, ay = Math.sin(angle) * armLen;
         ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(ax, ay);
-        ctx.strokeStyle = 'rgba(200, 215, 240, 0.6)'; ctx.lineWidth = 1.2; ctx.stroke();
+        ctx.strokeStyle = 'rgba(44, 50, 39, 0.5)'; ctx.lineWidth = 1.2; ctx.stroke();
         ctx.beginPath(); ctx.arc(ax, ay, 5, 0, Math.PI * 2);
-        ctx.strokeStyle = 'rgba(200, 215, 240, 0.3)'; ctx.lineWidth = 0.7; ctx.stroke();
+        ctx.strokeStyle = 'rgba(44, 50, 39, 0.25)'; ctx.lineWidth = 0.7; ctx.stroke();
         const spin = time * 80 + angle * 3;
         for (let b = 0; b < 2; b++) {
           const ba = spin + b * Math.PI;
           ctx.beginPath();
           ctx.moveTo(ax + Math.cos(ba) * 4.5, ay + Math.sin(ba) * 4.5);
           ctx.lineTo(ax - Math.cos(ba) * 4.5, ay - Math.sin(ba) * 4.5);
-          ctx.strokeStyle = 'rgba(200, 215, 240, 0.18)'; ctx.lineWidth = 0.8; ctx.stroke();
+          ctx.strokeStyle = 'rgba(44, 50, 39, 0.15)'; ctx.lineWidth = 0.8; ctx.stroke();
         }
       });
       ctx.beginPath(); ctx.arc(0, 0, 3.5, 0, Math.PI * 2);
-      ctx.fillStyle = BLUE_LIGHT; ctx.fill();
-      ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 0.6; ctx.stroke();
+      ctx.fillStyle = SAGE; ctx.fill();
+      ctx.strokeStyle = 'rgba(44, 50, 39, 0.3)'; ctx.lineWidth = 0.6; ctx.stroke();
       ctx.restore();
 
       // FOV cone
       ctx.beginPath(); ctx.moveTo(drone.x, drone.y);
       ctx.lineTo(drone.x - 20, drone.y + 18); ctx.lineTo(drone.x + 20, drone.y + 18);
-      ctx.closePath(); ctx.fillStyle = 'rgba(44, 123, 242, 0.03)'; ctx.fill();
+      ctx.closePath(); ctx.fillStyle = 'rgba(74, 103, 65, 0.02)'; ctx.fill();
 
-      // Telemetry
-      ctx.font = '500 8px "Space Mono", monospace';
-      ctx.fillStyle = 'rgba(96, 165, 250, 0.4)';
+      // Telemetry — amber
+      ctx.font = '500 8px "JetBrains Mono", "Space Mono", monospace';
+      ctx.fillStyle = 'rgba(196, 163, 74, 0.45)';
       ctx.fillText(`ALT 120m`, drone.x + 30, drone.y - 6);
       ctx.fillText(`SPD 8.2m/s`, drone.x + 30, drone.y + 5);
-      ctx.fillStyle = 'rgba(96, 165, 250, 0.25)';
+      ctx.fillStyle = 'rgba(196, 163, 74, 0.28)';
       ctx.fillText(`IMG ${Math.floor(droneT * 847)}`, drone.x + 30, drone.y + 16);
 
       animRef.current = requestAnimationFrame(draw);
@@ -365,7 +358,7 @@ export default function HomePage() {
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Mono:wght@400;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Prociono&family=Outfit:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap');
 
         @keyframes hp-fadeUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes hp-fadeIn { from { opacity: 0; } to { opacity: 1; } }
@@ -395,18 +388,18 @@ export default function HomePage() {
             position: 'absolute', top: 20, left: '50%', transform: 'translateX(-50%)', zIndex: 15,
             animation: 'hp-fadeIn 600ms ease forwards', animationDelay: '600ms', opacity: 0, animationFillMode: 'forwards',
           }}>
-            <img src="/flytbase-white.svg" alt="FlytBase" style={{ height: 22, opacity: 0.5 }} />
+            <img src="/flytbase-white.svg" alt="FlytBase" style={{ height: 22, opacity: 0.3, filter: 'invert(1)' }} />
           </div>
         )}
 
         {/* Top corners */}
         {showContent && (
           <>
-            <div style={{ position: 'absolute', top: 24, left: 24, zIndex: 15, fontSize: 9, color: TEXT3, letterSpacing: '0.1em', fontFamily: "'Space Mono', monospace", animation: 'hp-fadeIn 600ms ease forwards', animationDelay: '800ms', opacity: 0, animationFillMode: 'forwards' }}>
+            <div style={{ position: 'absolute', top: 24, left: 24, zIndex: 15, fontSize: 9, color: TEXT3, letterSpacing: '0.1em', fontFamily: "'JetBrains Mono', monospace", animation: 'hp-fadeIn 600ms ease forwards', animationDelay: '800ms', opacity: 0, animationFillMode: 'forwards' }}>
               18.5620°N · 73.6994°E
             </div>
-            <div style={{ position: 'absolute', top: 24, right: 24, zIndex: 15, fontSize: 9, color: TEXT3, letterSpacing: '0.1em', fontFamily: "'Space Mono', monospace", animation: 'hp-fadeIn 600ms ease forwards', animationDelay: '800ms', opacity: 0, animationFillMode: 'forwards', display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#34D399', boxShadow: '0 0 6px rgba(52,211,153,0.5)', animation: 'hp-dotBlink 2.5s ease infinite' }} />
+            <div style={{ position: 'absolute', top: 24, right: 24, zIndex: 15, fontSize: 9, color: TEXT3, letterSpacing: '0.1em', fontFamily: "'JetBrains Mono', monospace", animation: 'hp-fadeIn 600ms ease forwards', animationDelay: '800ms', opacity: 0, animationFillMode: 'forwards', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ width: 5, height: 5, borderRadius: '50%', background: SAGE, boxShadow: `0 0 6px rgba(74,103,65,0.4)`, animation: 'hp-dotBlink 2.5s ease infinite' }} />
               MISSION ACTIVE
             </div>
           </>
@@ -419,32 +412,14 @@ export default function HomePage() {
             ...(isTop ? { top: 14 } : { bottom: 14 }),
             ...(isLeft ? { left: 14 } : { right: 14 }),
             width: 18, height: 18, zIndex: 10,
-            borderTop: isTop ? '1px solid rgba(255,255,255,0.05)' : undefined,
-            borderBottom: !isTop ? '1px solid rgba(255,255,255,0.05)' : undefined,
-            borderLeft: isLeft ? '1px solid rgba(255,255,255,0.05)' : undefined,
-            borderRight: !isLeft ? '1px solid rgba(255,255,255,0.05)' : undefined,
+            borderTop: isTop ? '1px solid rgba(74,103,65,0.08)' : undefined,
+            borderBottom: !isTop ? '1px solid rgba(74,103,65,0.08)' : undefined,
+            borderLeft: isLeft ? '1px solid rgba(74,103,65,0.08)' : undefined,
+            borderRight: !isLeft ? '1px solid rgba(74,103,65,0.08)' : undefined,
             opacity: showContent ? 1 : 0, transition: 'opacity 600ms 500ms',
           } as any} />
         ))}
 
-        {/* HUD Cards */}
-        {showHUD && phase === 'idle' && HUD_CARDS.map((card, i) => (
-          <div key={i} style={{
-            position: 'absolute', left: `${card.x}%`, top: `${card.y}%`, zIndex: 12,
-            background: 'rgba(10, 18, 32, 0.88)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
-            border: '1px solid rgba(255,255,255,0.05)', borderRadius: 10, padding: '12px 16px', minWidth: 115,
-            animation: `hp-hudSlide 500ms cubic-bezier(0.34,1.56,0.64,1) forwards`,
-            animationDelay: `${i * 0.1}s`, opacity: 0, animationFillMode: 'forwards',
-            boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
-          }}>
-            <div style={{ position: 'absolute', top: -1, left: 12, width: 20, height: 2, background: BLUE, borderRadius: 1, opacity: 0.5 }} />
-            <div style={{ fontSize: 8, fontWeight: 600, color: TEXT3, letterSpacing: '0.14em', marginBottom: 6, fontFamily: "'Space Mono', monospace" }}>{card.label}</div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 3 }}>
-              <span style={{ fontSize: 26, fontWeight: 700, color: TEXT, letterSpacing: '-0.02em', lineHeight: 1 }}>{card.value}</span>
-              {card.unit && <span style={{ fontSize: 12, color: TEXT2, fontWeight: 400 }}>{card.unit}</span>}
-            </div>
-          </div>
-        ))}
 
         {/* ═══ CENTER ═══ */}
         <div style={{
@@ -458,15 +433,16 @@ export default function HomePage() {
               animation: 'hp-fadeUp 900ms cubic-bezier(0,0,0.2,1) forwards', opacity: 0,
             }}>
 
-              {/* AKARA title — geometric futuristic */}
+              {/* AKARA title — DM Serif Display (earthy, elegant) */}
               <h1 style={{
-                fontSize: 88, fontWeight: 700, lineHeight: 1,
-                letterSpacing: '0.2em',
-                fontFamily: "'Orbitron', sans-serif",
+                fontSize: 92, fontWeight: 400, lineHeight: 1,
+                letterSpacing: '0.12em',
+                fontFamily: "'Prociono', serif",
                 color: TEXT,
-                textShadow: `0 0 40px rgba(44, 123, 242, 0.4), 0 0 80px rgba(44, 123, 242, 0.15)`,
+                textShadow: `0 2px 20px rgba(74, 103, 65, 0.15)`,
                 marginBottom: 10,
-              }}>AKARA</h1>
+                textTransform: 'uppercase' as const,
+              }}>Akara</h1>
 
               {/* Tagline */}
               <p style={{
@@ -482,64 +458,160 @@ export default function HomePage() {
                 animation: 'hp-fadeIn 800ms ease forwards', animationDelay: '550ms', opacity: 0, animationFillMode: 'forwards',
               }}>
                 <span style={{ fontSize: 11, color: TEXT3, fontWeight: 400, letterSpacing: '0.12em' }}>by</span>
-                <img src="/flytbase-white.svg" alt="FlytBase" style={{ height: 13, opacity: 0.4 }} />
+                <img src="/flytbase-white.svg" alt="FlytBase" style={{ height: 13, opacity: 0.3, filter: 'invert(1)' }} />
               </div>
 
-              {/* CTA */}
+              {/* CTA — Join Waitlist */}
               <div style={{
-                position: 'relative',
                 animation: 'hp-fadeUp 600ms ease forwards', animationDelay: '650ms', opacity: 0, animationFillMode: 'forwards',
+                display: 'flex', flexDirection: 'column', alignItems: 'center',
               }}>
-                <div style={{
-                  position: 'absolute', inset: -3, borderRadius: 14,
-                  background: `linear-gradient(135deg, rgba(44,123,242,0.3), rgba(96,165,250,0.15), rgba(44,123,242,0.3))`,
-                  filter: 'blur(6px)', animation: 'hp-pulseRing 3s ease-in-out infinite',
-                }} />
-                <button onClick={handleLaunch} style={{
-                  position: 'relative',
-                  background: `linear-gradient(135deg, ${BLUE} 0%, #1A6AE0 50%, #2C7BF2 100%)`,
-                  border: '1px solid rgba(96, 165, 250, 0.3)',
-                  borderRadius: 12, padding: '16px 52px',
-                  color: '#fff', fontSize: 13, fontWeight: 700, letterSpacing: '0.14em', cursor: 'pointer',
-                  fontFamily: "'Outfit', sans-serif",
-                  transition: 'transform 200ms, box-shadow 200ms, border-color 200ms',
-                  boxShadow: `0 4px 28px rgba(44,123,242,0.35)`,
-                  display: 'flex', alignItems: 'center', gap: 10,
-                }}
-                  onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px) scale(1.03)'; e.currentTarget.style.boxShadow = `0 8px 36px rgba(44,123,242,0.5)`; }}
-                  onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0) scale(1)'; e.currentTarget.style.boxShadow = `0 4px 28px rgba(44,123,242,0.35)`; }}
-                >
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 1.5L12 7L3 12.5V1.5Z" fill="white" fillOpacity="0.9" /></svg>
-                  START MAPPING
-                </button>
-              </div>
-            </div>
-          )}
+                {!showWaitlist && !submitted && (
+                  <div style={{ position: 'relative' }}>
+                    <div style={{
+                      position: 'absolute', inset: -3, borderRadius: 14,
+                      background: `linear-gradient(135deg, rgba(74,103,65,0.3), rgba(196,163,74,0.15), rgba(74,103,65,0.3))`,
+                      filter: 'blur(6px)', animation: 'hp-pulseRing 3s ease-in-out infinite',
+                    }} />
+                    <button onClick={() => setShowWaitlist(true)} style={{
+                      position: 'relative',
+                      background: `linear-gradient(135deg, #4A6741 0%, #3D5736 50%, #4A6741 100%)`,
+                      border: '1px solid rgba(107, 138, 94, 0.3)',
+                      borderRadius: 12, padding: '16px 52px',
+                      color: '#fff', fontSize: 13, fontWeight: 700, letterSpacing: '0.14em', cursor: 'pointer',
+                      fontFamily: "'Outfit', sans-serif",
+                      transition: 'transform 200ms, box-shadow 200ms',
+                      boxShadow: `0 4px 28px rgba(74,103,65,0.35)`,
+                    }}
+                      onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px) scale(1.03)'; e.currentTarget.style.boxShadow = `0 8px 36px rgba(74,103,65,0.5)`; }}
+                      onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0) scale(1)'; e.currentTarget.style.boxShadow = `0 4px 28px rgba(74,103,65,0.35)`; }}
+                    >
+                      JOIN WAITLIST
+                    </button>
+                  </div>
+                )}
 
-          {/* Processing */}
-          {isLaunching && (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 24, animation: 'hp-fadeIn 300ms ease forwards' }}>
-              <div style={{ position: 'relative', width: 72, height: 72 }}>
-                <svg viewBox="0 0 72 72" style={{ width: 72, height: 72, animation: 'hp-processSpin 1.5s linear infinite' }}>
-                  <circle cx="36" cy="36" r="30" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="2" />
-                  <path d="M36,6 A30,30 0 0,1 66,36" fill="none" stroke={BLUE} strokeWidth="2.5" strokeLinecap="round" />
-                  <path d="M36,66 A30,30 0 0,1 6,36" fill="none" stroke={BLUE_LIGHT} strokeWidth="1.5" strokeLinecap="round" opacity="0.4" />
-                </svg>
-                <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 700, color: TEXT, fontFamily: "'Space Mono', monospace" }}>{Math.round(progress)}</div>
-              </div>
-              <div style={{ width: 240 }}>
-                <div style={{ height: 3, borderRadius: 2, background: 'rgba(255,255,255,0.04)', overflow: 'hidden' }}>
-                  <div style={{ height: '100%', borderRadius: 2, background: `linear-gradient(90deg, ${BLUE}, ${BLUE_LIGHT})`, width: `${progress}%`, transition: 'width 180ms ease', boxShadow: `0 0 12px ${BLUE_GLOW}` }} />
-                </div>
-                <div style={{ fontSize: 9, color: TEXT3, marginTop: 10, textAlign: 'center', letterSpacing: '0.08em', fontFamily: "'Space Mono', monospace" }}>
-                  {progress < 25 ? 'INITIALIZING TERRAIN ENGINE' : progress < 50 ? 'LOADING GEOSPATIAL DATA' : progress < 80 ? 'RENDERING ORTHOMOSAIC LAYERS' : 'LAUNCHING AKARA'}
-                </div>
+                {/* Waitlist form */}
+                {showWaitlist && !submitted && (
+                  <div style={{
+                    animation: 'hp-fadeUp 400ms ease forwards',
+                    background: 'rgba(44, 50, 39, 0.06)',
+                    backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
+                    border: '1px solid rgba(74,103,65,0.12)',
+                    borderRadius: 16, padding: '24px 28px',
+                    width: 360,
+                  }}>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: TEXT, marginBottom: 4, textAlign: 'center' }}>
+                      Get early access
+                    </div>
+                    <div style={{ fontSize: 11, color: TEXT3, marginBottom: 18, textAlign: 'center' }}>
+                      We'll notify you when your account is ready.
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      <input
+                        type="email"
+                        placeholder="Work email"
+                        value={email}
+                        onChange={e => setEmail(e.target.value)}
+                        style={{
+                          width: '100%', padding: '11px 14px',
+                          background: 'rgba(44, 50, 39, 0.04)',
+                          border: '1px solid rgba(74,103,65,0.12)',
+                          borderRadius: 8, fontSize: 13, color: TEXT,
+                          fontFamily: "'Outfit', sans-serif",
+                          outline: 'none', transition: 'border-color 150ms',
+                        }}
+                        onFocus={e => e.currentTarget.style.borderColor = 'rgba(74,103,65,0.35)'}
+                        onBlur={e => e.currentTarget.style.borderColor = 'rgba(74,103,65,0.12)'}
+                      />
+                      <input
+                        type="text"
+                        placeholder="Organization name"
+                        value={orgName}
+                        onChange={e => setOrgName(e.target.value)}
+                        style={{
+                          width: '100%', padding: '11px 14px',
+                          background: 'rgba(44, 50, 39, 0.04)',
+                          border: '1px solid rgba(74,103,65,0.12)',
+                          borderRadius: 8, fontSize: 13, color: TEXT,
+                          fontFamily: "'Outfit', sans-serif",
+                          outline: 'none', transition: 'border-color 150ms',
+                        }}
+                        onFocus={e => e.currentTarget.style.borderColor = 'rgba(74,103,65,0.35)'}
+                        onBlur={e => e.currentTarget.style.borderColor = 'rgba(74,103,65,0.12)'}
+                      />
+                      <button
+                        onClick={async () => {
+                          if (!email || !orgName) return;
+                          setSubmitting(true);
+                          try {
+                            // TODO: Replace with your webhook URL
+                            // await fetch('YOUR_WEBHOOK_URL', {
+                            //   method: 'POST',
+                            //   headers: { 'Content-Type': 'application/json' },
+                            //   body: JSON.stringify({ email, organization: orgName, timestamp: new Date().toISOString() }),
+                            // });
+                            await new Promise(r => setTimeout(r, 800)); // Simulated delay
+                          } catch (e) { /* silent */ }
+                          setSubmitting(false);
+                          setSubmitted(true);
+                        }}
+                        disabled={!email || !orgName || submitting}
+                        style={{
+                          width: '100%', padding: '12px',
+                          background: (!email || !orgName) ? 'rgba(74,103,65,0.3)' : `linear-gradient(135deg, #4A6741 0%, #3D5736 100%)`,
+                          border: 'none', borderRadius: 8,
+                          color: '#fff', fontSize: 13, fontWeight: 700,
+                          letterSpacing: '0.08em', cursor: (!email || !orgName) ? 'not-allowed' : 'pointer',
+                          fontFamily: "'Outfit', sans-serif",
+                          transition: 'all 200ms',
+                          boxShadow: (email && orgName) ? '0 4px 20px rgba(74,103,65,0.3)' : 'none',
+                          opacity: submitting ? 0.7 : 1,
+                        }}
+                      >
+                        {submitting ? 'SUBMITTING...' : 'REQUEST ACCESS'}
+                      </button>
+                    </div>
+
+                    <div style={{ fontSize: 10, color: TEXT3, marginTop: 12, textAlign: 'center', lineHeight: 1.4 }}>
+                      Limited beta. We'll review and get back within 24 hours.
+                    </div>
+                  </div>
+                )}
+
+                {/* Success state */}
+                {submitted && (
+                  <div style={{
+                    animation: 'hp-fadeUp 400ms ease forwards',
+                    background: 'rgba(74, 103, 65, 0.06)',
+                    backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
+                    border: '1px solid rgba(74,103,65,0.15)',
+                    borderRadius: 16, padding: '28px 32px',
+                    width: 360, textAlign: 'center',
+                  }}>
+                    <div style={{
+                      width: 40, height: 40, borderRadius: '50%',
+                      background: 'rgba(74,103,65,0.12)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      margin: '0 auto 14px',
+                    }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={SAGE} strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                    </div>
+                    <div style={{ fontSize: 16, fontWeight: 600, color: TEXT, marginBottom: 4 }}>
+                      You're on the list
+                    </div>
+                    <div style={{ fontSize: 12, color: TEXT2, lineHeight: 1.5 }}>
+                      We'll review your request and reach out to <span style={{ fontWeight: 500, color: TEXT }}>{email}</span> within 24 hours.
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
         </div>
 
-        {/* Bottom */}
+        {/* Bottom capabilities */}
         {showContent && phase === 'idle' && (
           <div style={{
             position: 'absolute', bottom: 22, left: 0, right: 0, zIndex: 14,
@@ -547,8 +619,8 @@ export default function HomePage() {
             animation: 'hp-fadeIn 600ms ease forwards', animationDelay: '1100ms', opacity: 0, animationFillMode: 'forwards',
           }}>
             {['ORTHOMOSAIC', 'ELEVATION', 'CHANGE DETECTION', '3D MESH'].map((item, i) => (
-              <div key={i} style={{ fontSize: 8, color: TEXT3, letterSpacing: '0.12em', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 5, fontFamily: "'Space Mono', monospace" }}>
-                <div style={{ width: 3, height: 3, borderRadius: '50%', background: BLUE, opacity: 0.4 }} />
+              <div key={i} style={{ fontSize: 8, color: TEXT3, letterSpacing: '0.12em', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 5, fontFamily: "'JetBrains Mono', monospace" }}>
+                <div style={{ width: 3, height: 3, borderRadius: '50%', background: AMBER, opacity: 0.4 }} />
                 {item}
               </div>
             ))}
